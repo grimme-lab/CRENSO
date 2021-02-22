@@ -16,10 +16,12 @@
 # PP & SG, 7/20-1/21
 ###############################################
 
-echo '                                                              '
-echo '          ===================================================='
-echo '          == crest_combi V 1.01, SG/PP Jan 2021, MCTC UBonn =='
-echo '          ===================================================='
+# V 1.02 Mo  Feb 22 15:25:46 CET 2021 added clearer printout
+
+echo '                                                                 '
+echo '          ======================================================='
+echo '          == crest_combi V 1.02, SG/PP/FB Feb 2021, MCTC UBonn =='
+echo '          ======================================================='
 
 #defaults
 solv=gas         # solvent name
@@ -66,7 +68,10 @@ ewin3=$(echo "scale=10; ($ewin-2)" | bc -l | gawk '{print $1}') # ewin for last 
 #########################
 # neutral
 rm -f gfnff_topo
-echo 'CREST 1 (FF,"$vfirst")...' 
+#echo 'CREST 1 (FF,"$vfirst")...' 
+echo -e "#>>># Running: CREST 1 (FF,$vfirst)" >&2
+echo -e "#>>># Running: CREST 1 (FF,$vfirst)" 
+
 if [ "$nmr" == "-nmr" ]; then
     echo 'Generating anmr_nucinfo and anmr_rotamers files for possible subsequent NMR calculation'
     crest coord $gbsa $solv -gfnff $vfirst -cluster $nclust -ewin $ewin -norotmd -nocross -mdlen $xtff -T $threads $nmr
@@ -78,9 +83,11 @@ mv crest_best.xyz best_gfnff.xyz
 cat crest_clustered.xyz > search_gfnff.xyz
 
 # artificial 1
-for dscal in $listd          
+for dscal in $listd
 do
-echo 'CREST (FF+/-disp)...' $dscal
+echo -e "#>>># Running: CREST (FF+/-disp)... $dscal" >&2
+echo -e "#>>># Running: CREST (FF+/-disp)... $dscal"
+#echo 'CREST (FF+/-disp)...' $dscal
 rm -f gfnff_topo
 # search with scaled dispersion interaction via the "-dispscal" command
 crest best_gfnff.xyz -gfnff -cluster $nclust -ewin $ewin -dispscal $dscal -norotmd -norestart -nocross -mdlen $xtffm -T $threads
@@ -93,10 +100,12 @@ if test -f .CHRG; then
 fi
 
 # artificial 2
-for c in $listc   
+for c in $listc
 do
 chrgmod=$(echo "scale=10; ($chrg+$c)" | bc -l | gawk '{print $1}')
-echo 'CREST (FF+/-charge)...' $chrgmod
+echo -e "#>>># Running: CREST (FF+/-charge)... $chrgmod" >&2
+echo -e "#>>># Running: CREST (FF+/-charge)... $chrgmod"
+#echo 'CREST (FF+/-charge)...' $chrgmod
 rm -f gfnff_topo
 echo $chrgmod > .CHRG
 # search with modified molecular charge +/-{1,2}
@@ -110,12 +119,20 @@ echo 'CREST screen (GFN2)...'
 cp search_gfnff.xyz search_gfnff_save.xyz
 rm -f gfnff_topo
 #1. energy re-rank (at FF level) because of +/-disp/ES structures (output: crest_ensemble.xyz)
+echo -e "#>>># Running: CREST structure optimization and energy reranking because of artificial search" >&2
+echo -e "#>>># Running: CREST structure optimization and energy reranking because of artificial search"
 crest -mdopt search_gfnff.xyz $gbsa $solv -opt crude -gfnff -ewin $ewin2 -T $threads  
 #2. Sorting of the optimized ensemble (output: overwritten crest_ensemble.xyz)
+echo -e "#>>># Running: CREST (cregen) ensemble sorting" >&2
+echo -e "#>>># Running: CREST (cregen) ensemble sorting"
 crest -cregen crest_ensemble.xyz -ewin $ewin -ethr 0.1 und -rthr 0.2 -bthr 0.03 -T $threads
 #3. GFN2 full opt (output: overwritten crest_ensemble.xyz)
+echo -e "#>>># Running: CREST GFN2 full optimization" >&2
+echo -e "#>>># Running: CREST GFN2 full optimization"
 crest $gbsa $solv -screen crest_ensemble.xyz -opt vtight -gfn2 -ewin $ewin -T $threads
 #4. PCA/k-Means clustering of final ensemble (output: crest_clustered.xyz)
+echo -e "#>>># Running: CREST initial FF PCA/k-Means clustering" >&2
+echo -e "#>>># Running: CREST initial FF PCA/k-Means clustering"
 crest -for crest_ensemble.xyz -cluster $nclust -ewin $ewin -T $threads
 mv crest_clustered.xyz search_gfnff.xyz
 mv crest_best.xyz        best_gfnff.xyz
@@ -123,15 +140,21 @@ mv crest_best.xyz        best_gfnff.xyz
 #########################
 # FF only part ends here
 #########################
-if [ "$mode" = "ff" ]; then           
+if [ "$mode" = "ff" ]; then
+   echo -e "#>>># Running: CREST final PCA/k-Means clustering for FF" >&2
+   echo -e "#>>># Running: CREST final PCA/k-Means clustering for FF" 
    crest -for search_gfnff.xyz -cluster tightincr -ewin $ewin -T $threads 
    mv crest_clustered.xyz crest_combi.xyz
 else
 ###############################################################
-#search on GFN2 level starting with best at GFN2 opt from FF SE  
+#search on GFN2 level starting with best at GFN2 opt from FF SE
 ###############################################################
    echo 'CREST 8 (GFN2) ...' $level2
+   echo -e "#>>># Running: CREST GFN2 search starting from FF SE = CREST 8 (GFN2) ... $level2" >&2
+   echo -e "#>>># Running: CREST GFN2 search starting from FF SE = CREST 8 (GFN2) ... $level2"
    crest best_gfnff.xyz $gbsa $solv -gfn2 -ewin $ewin3 -norotmd -nocross -mdlen x1.0 -T $threads
+   echo -e "#>>># Running: CREST GFN2 PCA/k-Means clustering into $nclust cluster" >&2
+   echo -e "#>>># Running: CREST GFN2 PCA/k-Means clustering into $nclust cluster"
    crest -for crest_conformers.xyz -cluster $nclust -T $threads
    mv crest_best.xyz        best_gfn2.xyz
    mv crest_clustered.xyz search_gfn2.xyz
@@ -140,12 +163,20 @@ else
    cat search_gfnff.xyz   > final.xyz
    cat search_gfn2.xyz   >> final.xyz
    echo 'CREST final cregen ...'
+   echo -e "#>>># Running: CREST (cregen) sorting final (FF/SQM) ensemble" >&2
+   echo -e "#>>># Running: CREST (cregen) sorting final (FF/SQM) ensemble"
    crest -cregen final.xyz -ewin $ewin -T $threads
+   echo -e "#>>># Running: CREST PCA/k-Means clustering for final (FF/SQM) ensemble" >&2
+   echo -e "#>>># Running: CREST PCA/k-Means clustering for final (FF/SQM) ensemble"
    crest -for crest_ensemble.xyz -cluster $nclust -ewin $ewin -T $threads
+   echo -e "#>>># Running: CREST final PCA/k-Means clustering for final (FF/SQM) ensemble" >&2
+   echo -e "#>>># Running: CREST final PCA/k-Means clustering for final (FF/SQM) ensemble"
    crest -for crest_clustered.xyz -cluster tightincr -ewin $ewin -T $threads
    cp crest_clustered.xyz crest_combi.xyz
 fi
 
 # the workflow provides a final ensemble called "crest_combi.xyz" for further processing
-                                    
+
+echo -e "#>>># CREST_COMBI: All done!" >&2
+echo "#>>># CREST_COMBI: All done!"
 
