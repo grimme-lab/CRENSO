@@ -187,9 +187,9 @@ if [ "$mode" != "" ]; then # run block (else just print)
       
       if [ "$mode" = "0" ]; then   ############## single structure mode for GFN2 opt input geometries #############
          echo -e "#>>># Running single-structure mode in $m" 
-         echo -e "#>>># Running single-structure mode in $m"  >> $OUT
+         echo -e "#>>># Running single-structure mode in $m"  > $OUT
          t2x coord > inp.xyz 2>/dev/null
-         xtb inp.xyz --alpb $s --opt vtight > $OUT
+         xtb inp.xyz --alpb $s --opt vtight >> $OUT
          mv xtbopt.xyz gfn2_opt.xyz
          x2t gfn2_opt.xyz > coord 2>/dev/null
          echo -e "#>>># Running CENSO single-structure mode in $m" 
@@ -207,26 +207,25 @@ if [ "$mode" != "" ]; then # run block (else just print)
       fi  
       if [ "$mode" = "1" ]; then    ############## quick crest_combi ############# 
          echo -e "#>>># Running quick crest_combi in $m"
-         echo -e "#>>># Running quick crest_combi in $m"  >> $OUT
+         echo -e "#>>># Running quick crest_combi in $m"  > $OUT
          if [ "$run" = "nmr" ]; then
-             time crest_combi -s $s -q -ewin $ec -T $T -nmr > $OUT
+             time crest_combi -s $s -q -ewin $ec -T $T -nmr >> $OUT
          else
-            time crest_combi -s $s -q -ewin $ec -T $T > $OUT
+            time crest_combi -s $s -q -ewin $ec -T $T >> $OUT
          fi
          echo -e "#>>># Running CENSO after quick crest_combi in $m" 
          echo -e "\n#>>># Running CENSO after quick crest_combi in $m \n"  >> $OUT
-         #echo -e "XXXXXXXXXXXXXXXXX FAB -solvent $s -inp crest_combi.xyz -part3 $p3 -part2 $p2 -part1 on -part0 on -OR $or -part4 $nmr -part0_threshold $ep0 -part1_threshold $ep1 -optlevel2 $olev -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O"
          time censo -solvent $s -inp crest_combi.xyz -part3 $p3 -part2 $p2 -part1 on -part0 on -OR $or -part4 $nmr -part0_threshold $ep0 -part1_threshold $ep1 -optlevel2 $olev -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
          echo -e "#>>># CENSO: All done!"
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
       fi 
       if [ "$mode" = "2" ]; then    ############## full crest_combi GESC GFN2 + DFT opt ############# 
          echo -e "#>>># Running full crest_combi in $m" 
-         echo -e "#>>># Running full crest_combi in $m"  >> $OUT
+         echo -e "#>>># Running full crest_combi in $m"  > $OUT
          if [ "$run" = "nmr" ]; then
-            time crest_combi -s $s    -ewin $ec -T $T -nmr > $OUT
+            time crest_combi -s $s    -ewin $ec -T $T -nmr >> $OUT
          else
-            time crest_combi -s $s    -ewin $ec -T $T > $OUT
+            time crest_combi -s $s    -ewin $ec -T $T >> $OUT
          fi
          echo -e "#>>># Running CENSO after full crest_combi in $m "
          echo -e "\n#>>># Running CENSO after full crest_combi in $m \n"  >> $OUT
