@@ -1,0 +1,281 @@
+#!/bin/bash
+
+echo '                                                           '
+echo '          ================================================='
+echo '          == crenso V 1.02,  SG, FB Jan 2021, MCTC UBonn =='
+echo '          ================================================='
+echo 'Note: for -pka, the main (coord) dir must contain the correct .CHRG file for the acid'
+# V 1.01 Sun Jan 31 23:37:16 CET 2021 -kow/oa_fine flag added, part3 on
+# V 1.02 We  Feb 10 12:04:11 CET 2021 -nmr, -help, -P, -O flags added
+
+mode=""
+argcheck=y
+optstr=$@
+or=off
+nmr=off
+OUT=crenso.out
+T=6
+setT=off # logical for T
+P=3 # threads in CENSO
+O=2 # cores per thread in CENSO
+censorc='~/.censorc'
+p3=off
+printhelp=off
+while [ "$argcheck" = "y" ]; do
+   if [ -n "$1" ]; then
+      case $1 in
+      "-l0"    )  mode=0;  p2=off ;;    # single structure single-point xTB 
+      "-l0opt" )  mode=0;  p2=on  ;;    #   "     "        DFT opt (check for geom. effect)
+      "-l1"    )  mode=1;  p2=off ;;    # quick crest_combi + part0/1
+      "-l1opt" )  mode=1;  p2=on  ;;    #   "        "      + part0/1/2 ie DFT opt
+      "-l2"    )  mode=2          ;;    # full crest_combi + gesc+ part0/1/2 ie DFT opt
+#                      EWINS:   CREST part0  part1
+#                                            2.0 kcal here yields reasonable thermal averages while more for OR are taken
+#                               8 kcal in crest is required because we really wanna have the best in spectro mode while in thermo mode, a close to best is ok
+#                                     3/4 kcal for part0 is something in between
+      "-pka"    )               ec=6; ep0=3; ep1=2.0; run=pka; s1=h2o; s2=h2o;        olev=lax ;;                 # thermo mode
+      "-kow"    )               ec=6; ep0=3; ep1=2.0; run=kow; s1=h2o; s2=woctanol;   olev=lax; p3=off; p1=on ;;  # thermo mode
+      "-kow_fine")              ec=6; ep0=3; ep1=2.0; run=kow; s1=h2o; s2=woctanol;   olev=lax; p3=on;  p1=off ;; # thermo mode
+      "-khw"    )               ec=6; ep0=3; ep1=2.0; run=kow; s1=h2o; s2=hexane;     olev=lax; p3=off; p1=on ;;  # thermo mode
+      "-khw_fine")              ec=6; ep0=3; ep1=2.0; run=kow; s1=h2o; s2=hexane;     olev=lax; p3=on;  p1=off ;; # thermo mode
+      "-koa"    )               ec=6; ep0=3; ep1=2.0; run=kow; s1=gas; s2=octanol;    olev=lax; p3=off; p1=on ;;  # thermo mode
+      "-koa_fine")              ec=6; ep0=3; ep1=2.0; run=kow; s1=gas; s2=octanol;    olev=lax; p3=on;  p1=off ;; # thermo mode
+      "-khda"   )               ec=6; ep0=3; ep1=2.0; run=kow; s1=gas; s2=hexadecane; olev=lax; p3=off; p1=on ;;  # thermo mode
+      "-khda_fine")             ec=6; ep0=3; ep1=2.0; run=kow; s1=gas; s2=hexadecane; olev=lax; p3=on;  p1=off ;; # thermo mode
+      "-or"     ) shift; s1=$1; ec=8; ep0=4; ep1=2.5; run=or;  or=on;                 olev=normal ;;              # spectro mode
+      "-or_fine") shift; s1=$1; ec=10;ep0=5; ep1=3.0; run=or;  or=on;                 olev=normal ;;              # spectro mode
+      "-nmr"    ) shift; s1=$1; ec=7; ep0=4; ep1=2.5; run=nmr; nmr=on;                olev=lax; p1=on; p3=off ;;  # property/spectra mode
+      "-T"      ) shift; T=$1;  setT=on ;; 
+      "-P"      ) shift; P=$1 ;; # independent parallel threads in CENSO            --> P * O = T
+      "-O"      ) shift; O=$1 ;; # number of cores for independent threads in CENSO --> P * O = T
+      "-inprc"  ) shift; censorc=$1; echo $censorc ;; # explicit path to censorc
+      "-h"      ) printhelp=on;;
+      "--help"  ) printhelp=on;;
+      esac
+      shift
+   else
+      argcheck=n
+   fi  
+done
+
+if [ $printhelp == on ];then
+    echo ""
+    echo "Printing help message:"
+    echo ""
+    echo "-l0                = single structure mode for GFN2 opt input geometries"
+    echo "-l0opt             = single structure mode for  DFT opt input geometries (check or geom. effect)"
+    echo "-l1                = quick crest_combi + CENSO[part0/1]"
+    echo "-l1opt             = quick crest_combi + CENSO[part0/1/2] i.e. DFT optimization"
+    echo "-l2                =  full crest_combi + gESC + CENSO[part0/1/2]"
+    echo "-pka               = pka calculation for acid (A) and base (B) in water"
+    echo "-kow               = 1-octanol/water partition coefficent calculation"
+    echo "-kow_fine          = 1-octanol/water partition coefficient calculation using CENSO[part3] for COSMO-RS[FINE]"
+    echo "-khw               =    hexane/water partition coefficient calculation"
+    echo "-khw_fine          =    hexane/water partition coefficient calculation using CENSO[part3] for COSMO-RS[FINE]"
+    echo "-koa               =   1-octanol/air partition coefficient calculation"
+    echo "-koa_fine          =   1-octanol/air partition coefficient calculation using CENSO[part3] for COSMO-RS[FINE]"
+    echo "-khda              =  hexadecane/air partition coefficient calculation"
+    echo "-khda_fine         =  hexadecane/air partition coefficient calculation"
+    echo "-or [solvent]      = optical roatatory dispersion calculation"
+    echo "-or_fine [solvent] = optical roatatory dispersion calculation using larger energy windows/thresholds"
+    echo "-nmr [solvent]     = NMR calculation, settings are determined from the CENSO global configuration file"
+    echo "-T                 = number of threads used in CREST, can also be set by using P and O"
+    echo "-P                 = number of independent parallel cthreads in CENSO (P * O = T)"
+    echo "-O                 = number of cores for independent threads in CENSO (P * O = T)"
+    echo "-inprc             = provide explicit absolute path to a CENSO global configuration file"
+    echo "-h                 = print help message"
+    echo ""
+    echo "General information:"
+    echo "Many settings concerning CENSO are determined by the global configuration file ~/.censorc and"
+    echo "can be adjusted by the user."
+    echo ""
+    echo "Example usage:"
+    echo " $ crenso -l1opt -pka -P 2 -O 3 "
+    exit
+fi
+
+
+# determine T from P and O
+if [ $setT != on ];then
+    T=$(expr $P \* $O)
+    echo "T is set to $T"
+fi
+
+if [ "$mode" != "" ]; then # run block (else just print)
+
+########################## prepare
+chrga=0
+chrgb=0
+ uhfa=0
+ uhfb=0
+if test -f .CHRG; then
+ chrga=`cat .CHRG`
+ chrgb=`cat .CHRG`
+fi
+if test -f .UHF; then
+ uhfa=`cat .UHF`
+ uhfb=`cat .UHF`
+fi
+if test -f .UHFA; then
+ uhfa=`cat .UHFA`
+ uhfb=`cat .UHFB`
+fi
+
+if [ "$run" = "pka" ]; then           
+ chrgb=$(echo "scale=10; ($chrga-1)" | bc -l | gawk '{print $1}')
+ if test ! -d A; then
+    echo "generate A/B dirs first using pkaquick!"
+    exit
+ fi
+ if test ! -d B; then
+    echo "generate A/B dirs first using pkaquick!"
+    exit
+ fi
+fi
+for value in 'kow' 'kow_fine' 'koa' 'koa_fine' 'khw' 'khw_fine' 'khda' 'khda_fine'  
+do                                                                                  
+    if [ "$run" == "$value" ]; then                                                 
+     rm -rf A B                                                                     
+     mkdir A                                                                        
+     mkdir B                                                                        
+     cp coord A                                                                     
+     cp coord B                                                                     
+    fi                                                                              
+done                                                                                
+if [ "$run" = "or" ]; then
+ rm -rf A 
+ mkdir A 
+ cp coord A
+fi
+if [ "$run" = "nmr" ]; then
+    echo 'Performing NMR property calculations'
+    echo 'All CENSO settings concerning NMR are read from your CENSO global configuration file .censorc'
+    rm -rf A 
+    mkdir A 
+    cp coord A
+fi
+
+echo $ec $ep0 $ep1 $s1 $s2 $mode $run $OUT
+
+########################## run   
+
+for m in A B
+do
+   s=$s1
+ uhf=$uhfa 
+chrg=$chrga
+[ "$m" = "B" ] && { s=$s2; uhf=$uhfb; chrg=$chrgb; }
+echo "system " $m ":" $chrg $uhf $s
+if [ "$m" = "B" ] && [ "$run" = "or" ]; then
+    exit
+elif [ "$m" = "B" ] && [ "$run" = "nmr" ]; then
+    exit
+fi  
+
+cd $m
+echo $uhf > .UHF
+echo $chrg > .CHRG
+
+rm -rf enso* CONF*
+
+if [ "$mode" = "0" ]; then   ############## single structure mode for GFN2 opt input geometries #############
+   t2x coord > inp.xyz 2>/dev/null
+   xtb inp.xyz --alpb $s --opt vtight > $OUT
+   mv xtbopt.xyz gfn2_opt.xyz
+   x2t gfn2_opt.xyz > coord 2>/dev/null
+   time censo -solvent $s -inp gfn2_opt.xyz -part3 $p3 -part2 $p2 -part1 $p1 -part0 off -OR $or -part4 $nmr -optlevel2 $olev -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
+   if [ "$run" = "nmr" ]; then
+       # create anmr_nucinfo and anmr_rotamer
+       t2x coord.enso_best > crest_rotamers_0.xyz 2>/dev/null
+       crest coord.enso_best -cregen -nmr >> $OUT
+   fi  
+fi  
+if [ "$mode" = "1" ]; then    ############## quick crest_combi ############# 
+   if [ "$run" = "nmr" ]; then
+       time crest_combi -s $s -q -ewin $ec -T $T -nmr > $OUT
+   else
+      time crest_combi -s $s -q -ewin $ec -T $T > $OUT
+   fi  
+   time censo -solvent $s -inp crest_combi.xyz -part3 $p3 -part2 $p2 -part1 on -part0 on -OR $or -part4 $nmr -part0_threshold $ep0 -part1_threshold $ep1 -optlevel2 $olev -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
+fi 
+if [ "$mode" = "2" ]; then    ############## full crest_combi GESC GFN2 + DFT opt ############# 
+   if [ "$run" = "nmr" ]; then
+      time crest_combi -s $s    -ewin $ec -T $T -nmr > $OUT
+   else
+      time crest_combi -s $s    -ewin $ec -T $T > $OUT
+   fi  
+   time censo -solvent $s -inp crest_combi.xyz -part2 off -part1 on -part0 on -evaluate_rrho off -part0_threshold $ep0 -part1_threshold $ep1 -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
+   cp coord.enso_best coord
+   time crest -gesc+ enso_ensemble_part1.xyz -gescopt loose -alpb $s -nocross -norotmd -mdlen x1.0 -ewin $ep0 >> $OUT  
+        crest -for crest_conformers.xyz --cluster tightincr >> $OUT
+   rm -rf enso* CONF*
+   time censo -solvent $s -inp crest_clustered.xyz -OR $or -part4 $nmr -part3 $p3 -part2 on -part1 on -part0 on -part0_threshold $ep0 -part1_threshold $ep1 -optlevel2 $olev -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
+fi
+
+cd ..
+done
+
+fi # run block
+
+########################## print result (if no part1/2 out is present, a printout error message appears which can be ignored)
+# the pKa fit is specific for r2SCAN-3c and H2O
+dg1=0
+dg2=0
+dg3=0
+echo "================================================"
+if [ "$s1" = "gas" ]; then           
+g13=`grep '<<==part3==' A/$OUT | tail -1 | gawk '{print $4}'`
+else
+g13=`grep '<<==part3==' A/$OUT | tail -1 | gawk '{print $5}'`
+fi
+g23=`grep '<<==part3==' B/$OUT | tail -1 | gawk '{print $5}'`
+if [ "$g13" != "" ]; then           
+dg3=$(echo "scale=10; ($g23-($g13))*627.509541" | bc -l | gawk '{printf "  %12.6f\n", $1}')
+logk3=$(echo "scale=10; ($dg3)"   | bc -l | gawk '{printf "  %12.6f\n", ($1/0.592452)/2.302585}')
+pkal3=$(echo "scale=10; ($logk3)" | bc -l | gawk '{printf "  %12.3f\n", $1*0.890-170.0}')
+pka33=$(echo "scale=10; ($logk3)" | bc -l | gawk '{printf "  %12.3f\n", -1656.7+23.185*$1-0.11103*$1*$1+0.0001835*$1*$1*$1}')
+echo $g13 $g23        " G (A/B)  part3"                        
+fi
+if [ "$s1" = "gas" ]; then           
+g11=`grep '<<==part1==' A/$OUT | tail -1 | gawk '{print $4}'`
+else
+g11=`grep '<<==part1==' A/$OUT | tail -1 | gawk '{print $5}'`
+fi
+g21=`grep '<<==part1==' B/$OUT | tail -1 | gawk '{print $5}'`
+if [ "$g11" != "" ]; then           
+dg1=$(echo "scale=10; ($g21-($g11))*627.509541" | bc -l | gawk '{printf "  %12.6f\n", $1}')
+logk1=$(echo "scale=10; ($dg1)"   | bc -l | gawk '{printf "  %12.6f\n", ($1/0.592452)/2.302585}')
+pkal1=$(echo "scale=10; ($logk1)" | bc -l | gawk '{printf "  %12.3f\n", $1*0.890-170.0}')
+pka31=$(echo "scale=10; ($logk1)" | bc -l | gawk '{printf "  %12.3f\n", -1656.7+23.185*$1-0.11103*$1*$1+0.0001835*$1*$1*$1}')
+echo $g11 $g21        " G (A/B)  part1"                        
+fi
+if [ "$s1" = "gas" ]; then           
+g12=`grep '<<==part2==' A/$OUT | tail -1 | gawk '{print $4}'`
+else
+g12=`grep '<<==part2==' A/$OUT | tail -1 | gawk '{print $5}'`
+fi
+g22=`grep '<<==part2==' B/$OUT | tail -1 | gawk '{print $5}'`
+if [ "$g12" != "" ]; then           
+dg2=$(echo "scale=10; ($g22-($g12))*627.509541" | bc -l | gawk '{printf "  %12.6f\n", $1}')
+logk2=$(echo "scale=10; ($dg2)"   | bc -l | gawk '{printf "  %12.6f\n", ($1/0.592452)/2.302585}')
+pkal2=$(echo "scale=10; ($logk2)" | bc -l | gawk '{printf "  %12.3f\n", $1*0.890-170.0}')
+pka32=$(echo "scale=10; ($logk2)" | bc -l | gawk '{printf "  %12.3f\n", -1656.7+23.185*$1-0.11103*$1*$1+0.0001835*$1*$1*$1}')
+echo $g12 $g22        " G (A/B)  part2"                        
+fi
+if test -f A/coord.enso_best; then
+   a=`head -1 A/coord.enso_best | gawk '{print $5}'`
+   b=`head -1 B/coord.enso_best | gawk '{print $5}'`
+   echo $a  $b
+fi
+if [ "$run" = "pka" ]; then           
+   echo $pka31 $pkal1    " pka (qubic fit), pka(lin fit) part1"
+   echo $pka32 $pkal2    " pka (qubic fit), pka(lin fit) part2"
+else
+   logk1=$(echo "scale=10; ($dg1)" | bc -l | gawk '{printf "  %12.6f\n", (-$1/0.592452)/2.302585}')
+   logk2=$(echo "scale=10; ($dg2)" | bc -l | gawk '{printf "  %12.6f\n", (-$1/0.592452)/2.302585}')
+   logk3=$(echo "scale=10; ($dg3)" | bc -l | gawk '{printf "  %12.6f\n", (-$1/0.592452)/2.302585}')
+   echo $logk1           " logK "$s2"-"$s1" part1"
+   echo $logk2           " logK "$s2"-"$s1" part2"
+   echo $logk3           " logK "$s2"-"$s1" part3"
+fi
+echo "================================================"
