@@ -4,6 +4,7 @@ echo '                                                           '
 echo '          ================================================='
 echo '          == crenso V 1.03,  SG, FB Feb 2021, MCTC UBonn =='
 echo '          ================================================='
+echo ""
 echo 'Note: for -pka, the main (coord) dir must contain the correct .CHRG file for the acid'
 # V 1.01 Sun Jan 31 23:37:16 CET 2021 -kow/oa_fine flag added, part3 on
 # V 1.02 We  Feb 10 12:04:11 CET 2021 -nmr, -help, -P, -O flags added
@@ -22,6 +23,7 @@ O=2 # cores per thread in CENSO
 censorc='~/.censorc'
 p3=off
 printhelp=off
+progress=on
 while [ "$argcheck" = "y" ]; do
    if [ -n "$1" ]; then
       case $1 in
@@ -87,11 +89,17 @@ if [ $printhelp == on ];then
     echo "-h                 = print help message"
     echo ""
     echo "General information:"
+    echo "Note: for -pka, the main (coord) dir must contain the correct .CHRG file for the acid"
     echo "Many settings concerning CENSO are determined by the global configuration file ~/.censorc and"
     echo "can be adjusted by the user."
+    echo "crest_combi and CENSO print their progress to stderr so that the overall run can be tracked."
+    echo "To keep this tracking information the stderr has to be saved as well, see example usage."
     echo ""
     echo "Example usage:"
     echo " $ crenso -l1opt -pka -P 2 -O 3  >> output.crenso 2>&1 &"
+    echo ""
+    echo "Produce printout for pka kow after previous calculation:"
+    echo " $ crenso -pka > output.crenso &"
     exit
 fi
 
@@ -177,24 +185,41 @@ if [ "$mode" != "" ]; then # run block (else just print)
       fi  
       
       cd $m
-      echo -e "\n#>>># Starting calculation in $m charge= $chrg uhf= $uhf solvent= $s"
-      echo -e "\n#>>># Starting calculation in $m charge= $chrg uhf= $uhf solvent= $s"  >> $OUT
+      echo -e "\n#>>># Starting calculation in $m charge= $chrg uhf= $uhf solvent= $s" |tee -a $OUT
       
       echo $uhf > .UHF
       echo $chrg > .CHRG
       
       rm -rf enso* CONF*
       
-      if [ "$mode" = "0" ]; then   ############## single structure mode for GFN2 opt input geometries #############
+      if [ "$mode" = "0" ]; then   
+         ############## single structure mode for GFN2 opt input geometries ####
          echo -e "#>>># Running single-structure mode in $m" 
-         echo -e "#>>># Running single-structure mode in $m"  > $OUT
+         echo -e "#>>># Running single-structure mode in $m"  >> $OUT
          t2x coord > inp.xyz 2>/dev/null
          xtb inp.xyz --alpb $s --opt vtight >> $OUT
          mv xtbopt.xyz gfn2_opt.xyz
          x2t gfn2_opt.xyz > coord 2>/dev/null
          echo -e "#>>># Running CENSO single-structure mode in $m" 
          echo -e "\n#>>># Running CENSO single-structure mode in $m \n"  >> $OUT
-         time censo -solvent $s -inp gfn2_opt.xyz -part3 $p3 -part2 $p2 -part1 $p1 -part0 off -OR $or -part4 $nmr -optlevel2 $olev -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
+         PARAMS0=(
+            -solvent $s
+            -chrg $chrg
+            -u $uhf
+            -inp gfn2_opt.xyz
+            -part0 off
+            -part1 $p1
+            -part2 $p2
+            -part3 $p3
+            -part4 $nmr
+            -OR $or
+            -optlevel2 $olev
+            -inprc $censorc
+            -P $P 
+            -O $O
+            -progress $progress
+         )
+         time censo ${PARAMS0[@]} >> $OUT
          echo -e "#>>># CENSO: All done!"
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
          if [ "$run" = "nmr" ]; then
@@ -205,9 +230,10 @@ if [ "$mode" != "" ]; then # run block (else just print)
              crest coord.enso_best -cregen -nmr >> $OUT
          fi  
       fi  
-      if [ "$mode" = "1" ]; then    ############## quick crest_combi ############# 
+      if [ "$mode" = "1" ]; then    
+         ############## quick crest_combi ############# 
          echo -e "#>>># Running quick crest_combi in $m"
-         echo -e "#>>># Running quick crest_combi in $m"  > $OUT
+         echo -e "#>>># Running quick crest_combi in $m"  >> $OUT
          if [ "$run" = "nmr" ]; then
              time crest_combi -s $s -q -ewin $ec -T $T -nmr >> $OUT
          else
@@ -215,13 +241,33 @@ if [ "$mode" != "" ]; then # run block (else just print)
          fi
          echo -e "#>>># Running CENSO after quick crest_combi in $m" 
          echo -e "\n#>>># Running CENSO after quick crest_combi in $m \n"  >> $OUT
-         time censo -solvent $s -inp crest_combi.xyz -part3 $p3 -part2 $p2 -part1 on -part0 on -OR $or -part4 $nmr -part0_threshold $ep0 -part1_threshold $ep1 -optlevel2 $olev -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
+         PARAMS1=(
+            -solvent $s
+            -chrg $chrg
+            -u $uhf
+            -inp crest_combi.xyz
+            -part0 on
+            -part0_threshold $ep0
+            -part1 on
+            -part1_threshold $ep1
+            -part2 $p2
+            -part3 $p3
+            -part4 $nmr
+            -OR $or
+            -optlevel2 $olev
+            -inprc $censorc
+            -P $P 
+            -O $O
+            -progress $progress
+         )
+         time censo ${PARAMS1[@]} >> $OUT
          echo -e "#>>># CENSO: All done!"
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
       fi 
-      if [ "$mode" = "2" ]; then    ############## full crest_combi GESC GFN2 + DFT opt ############# 
+      if [ "$mode" = "2" ]; then    
+         ############## full crest_combi GESC GFN2 + DFT opt ############# 
          echo -e "#>>># Running full crest_combi in $m" 
-         echo -e "#>>># Running full crest_combi in $m"  > $OUT
+         echo -e "#>>># Running full crest_combi in $m"  >> $OUT
          if [ "$run" = "nmr" ]; then
             time crest_combi -s $s    -ewin $ec -T $T -nmr >> $OUT
          else
@@ -229,7 +275,26 @@ if [ "$mode" != "" ]; then # run block (else just print)
          fi
          echo -e "#>>># Running CENSO after full crest_combi in $m "
          echo -e "\n#>>># Running CENSO after full crest_combi in $m \n"  >> $OUT
-         time censo -solvent $s -inp crest_combi.xyz -part2 off -part1 on -part0 on -evaluate_rrho off -part0_threshold $ep0 -part1_threshold $ep1 -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
+         PARAMS2start=(
+            -solvent $s
+            -chrg $chrg
+            -u $uhf
+            -inp crest_combi.xyz
+            -evaluate_rrho off
+            -part0 on
+            -part0_threshold $ep0
+            -part1 on
+            -part1_threshold $ep1
+            -part2 off
+            -part3 off
+            -part4 off
+            -OR off
+            -inprc $censorc
+            -P $P 
+            -O $O
+            -progress $progress
+         )
+         time censo ${PARAMS2start[@]} >> $OUT
          echo -e "#>>># CENSO: All done!"
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
          cp coord.enso_best coord
@@ -240,13 +305,31 @@ if [ "$mode" != "" ]; then # run block (else just print)
          rm -rf enso* CONF*
          echo -e "#>>># Running CENSO after CREST[gESC] search in $m" 
          echo -e "\n#>>># Running CENSO after CREST[gESC] search in $m \n"   >> $OUT
-         time censo -solvent $s -inp crest_clustered.xyz -OR $or -part4 $nmr -part3 $p3 -part2 on -part1 on -part0 on -part0_threshold $ep0 -part1_threshold $ep1 -optlevel2 $olev -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
+         PARAMS2final=(
+            -solvent $s
+            -chrg $chrg 
+            -u $uhf  
+            -inp crest_clustered.xyz
+            -part0 on 
+            -part0_threshold $ep0
+            -part1 on
+            -part1_threshold $ep1
+            -part2 on
+            -optlevel2 $olev
+            -part3 $p3
+            -part4 $nmr
+            -OR $or
+            -inprc $censorc
+            -P $P 
+            -O $O
+            -progress $progress
+         )
+         time censo ${PARAMS2final[@]} >> $OUT
          echo -e "#>>># CENSO: All done!"
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
       fi
       cd ..
   done
-  
 fi # run block
 
 ########################## print result (if no part1/2 out is present, a printout error message appears which can be ignored)
