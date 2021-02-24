@@ -2,11 +2,13 @@
 
 echo '                                                           '
 echo '          ================================================='
-echo '          == crenso V 1.02,  SG, FB Jan 2021, MCTC UBonn =='
+echo '          == crenso V 1.03,  SG, FB Feb 2021, MCTC UBonn =='
 echo '          ================================================='
+echo ""
 echo 'Note: for -pka, the main (coord) dir must contain the correct .CHRG file for the acid'
 # V 1.01 Sun Jan 31 23:37:16 CET 2021 -kow/oa_fine flag added, part3 on
 # V 1.02 We  Feb 10 12:04:11 CET 2021 -nmr, -help, -P, -O flags added
+# V 1.03 Mo  Feb 22 15:22:35 CET 2021 added printout 
 
 mode=""
 argcheck=y
@@ -15,12 +17,13 @@ or=off
 nmr=off
 OUT=crenso.out
 T=6
-setT=off # logical for T
+setT=off # logical for T = threads in CREST
 P=3 # threads in CENSO
 O=2 # cores per thread in CENSO
 censorc='~/.censorc'
 p3=off
 printhelp=off
+progress=on
 while [ "$argcheck" = "y" ]; do
    if [ -n "$1" ]; then
       case $1 in
@@ -86,11 +89,17 @@ if [ $printhelp == on ];then
     echo "-h                 = print help message"
     echo ""
     echo "General information:"
+    echo "Note: for -pka, the main (coord) dir must contain the correct .CHRG file for the acid"
     echo "Many settings concerning CENSO are determined by the global configuration file ~/.censorc and"
     echo "can be adjusted by the user."
+    echo "crest_combi and CENSO print their progress to stderr so that the overall run can be tracked."
+    echo "To keep this tracking information the stderr has to be saved as well, see example usage."
     echo ""
     echo "Example usage:"
-    echo " $ crenso -l1opt -pka -P 2 -O 3 "
+    echo " $ crenso -l1opt -pka -P 2 -O 3  >> output.crenso 2>&1 &"
+    echo ""
+    echo "Produce printout for pka kow after previous calculation:"
+    echo " $ crenso -pka > output.crenso &"
     exit
 fi
 
@@ -98,123 +107,229 @@ fi
 # determine T from P and O
 if [ $setT != on ];then
     T=$(expr $P \* $O)
-    echo "T is set to $T"
+    echo "Total number of CPUs(threads) (T) is set to $T"
 fi
 
 if [ "$mode" != "" ]; then # run block (else just print)
+  ########################## prepare
+  chrga=0
+  chrgb=0
+   uhfa=0
+   uhfb=0
+  if test -f .CHRG; then
+   chrga=`cat .CHRG`
+   chrgb=`cat .CHRG`
+  fi
+  if test -f .UHF; then
+   uhfa=`cat .UHF`
+   uhfb=`cat .UHF`
+  fi
+  if test -f .UHFA; then
+   uhfa=`cat .UHFA`
+   uhfb=`cat .UHFB`
+  fi
 
-########################## prepare
-chrga=0
-chrgb=0
- uhfa=0
- uhfb=0
-if test -f .CHRG; then
- chrga=`cat .CHRG`
- chrgb=`cat .CHRG`
-fi
-if test -f .UHF; then
- uhfa=`cat .UHF`
- uhfb=`cat .UHF`
-fi
-if test -f .UHFA; then
- uhfa=`cat .UHFA`
- uhfb=`cat .UHFB`
-fi
+  if [ "$run" = "pka" ]; then
+   chrgb=$(echo "scale=10; ($chrga-1)" | bc -l | gawk '{print $1}')
+   if test ! -d A; then
+      echo "generate A/B dirs first using pkaquick!"
+      exit
+   fi
+   if test ! -d B; then
+      echo "generate A/B dirs first using pkaquick!"
+      exit
+   fi
+  fi
+  for value in 'kow' 'kow_fine' 'koa' 'koa_fine' 'khw' 'khw_fine' 'khda' 'khda_fine'
+  do
+      if [ "$run" == "$value" ]; then
+       rm -rf A B
+       mkdir A
+       mkdir B
+       cp coord A
+       cp coord B
+      fi
+  done
+  if [ "$run" = "or" ]; then
+   rm -rf A 
+   mkdir A 
+   cp coord A
+  fi
+  if [ "$run" = "nmr" ]; then
+      echo 'Performing NMR property calculations'
+      echo 'All CENSO settings concerning NMR are read from your CENSO global configuration file .censorc'
+      rm -rf A 
+      mkdir A 
+      cp coord A
+  fi
 
-if [ "$run" = "pka" ]; then           
- chrgb=$(echo "scale=10; ($chrga-1)" | bc -l | gawk '{print $1}')
- if test ! -d A; then
-    echo "generate A/B dirs first using pkaquick!"
-    exit
- fi
- if test ! -d B; then
-    echo "generate A/B dirs first using pkaquick!"
-    exit
- fi
-fi
-for value in 'kow' 'kow_fine' 'koa' 'koa_fine' 'khw' 'khw_fine' 'khda' 'khda_fine'  
-do                                                                                  
-    if [ "$run" == "$value" ]; then                                                 
-     rm -rf A B                                                                     
-     mkdir A                                                                        
-     mkdir B                                                                        
-     cp coord A                                                                     
-     cp coord B                                                                     
-    fi                                                                              
-done                                                                                
-if [ "$run" = "or" ]; then
- rm -rf A 
- mkdir A 
- cp coord A
-fi
-if [ "$run" = "nmr" ]; then
-    echo 'Performing NMR property calculations'
-    echo 'All CENSO settings concerning NMR are read from your CENSO global configuration file .censorc'
-    rm -rf A 
-    mkdir A 
-    cp coord A
-fi
-
-echo $ec $ep0 $ep1 $s1 $s2 $mode $run $OUT
-
-########################## run   
-
-for m in A B
-do
-   s=$s1
- uhf=$uhfa 
-chrg=$chrga
-[ "$m" = "B" ] && { s=$s2; uhf=$uhfb; chrg=$chrgb; }
-echo "system " $m ":" $chrg $uhf $s
-if [ "$m" = "B" ] && [ "$run" = "or" ]; then
-    exit
-elif [ "$m" = "B" ] && [ "$run" = "nmr" ]; then
-    exit
-fi  
-
-cd $m
-echo $uhf > .UHF
-echo $chrg > .CHRG
-
-rm -rf enso* CONF*
-
-if [ "$mode" = "0" ]; then   ############## single structure mode for GFN2 opt input geometries #############
-   t2x coord > inp.xyz 2>/dev/null
-   xtb inp.xyz --alpb $s --opt vtight > $OUT
-   mv xtbopt.xyz gfn2_opt.xyz
-   x2t gfn2_opt.xyz > coord 2>/dev/null
-   time censo -solvent $s -inp gfn2_opt.xyz -part3 $p3 -part2 $p2 -part1 $p1 -part0 off -OR $or -part4 $nmr -optlevel2 $olev -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
-   if [ "$run" = "nmr" ]; then
-       # create anmr_nucinfo and anmr_rotamer
-       t2x coord.enso_best > crest_rotamers_0.xyz 2>/dev/null
-       crest coord.enso_best -cregen -nmr >> $OUT
-   fi  
-fi  
-if [ "$mode" = "1" ]; then    ############## quick crest_combi ############# 
-   if [ "$run" = "nmr" ]; then
-       time crest_combi -s $s -q -ewin $ec -T $T -nmr > $OUT
-   else
-      time crest_combi -s $s -q -ewin $ec -T $T > $OUT
-   fi  
-   time censo -solvent $s -inp crest_combi.xyz -part3 $p3 -part2 $p2 -part1 on -part0 on -OR $or -part4 $nmr -part0_threshold $ep0 -part1_threshold $ep1 -optlevel2 $olev -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
-fi 
-if [ "$mode" = "2" ]; then    ############## full crest_combi GESC GFN2 + DFT opt ############# 
-   if [ "$run" = "nmr" ]; then
-      time crest_combi -s $s    -ewin $ec -T $T -nmr > $OUT
-   else
-      time crest_combi -s $s    -ewin $ec -T $T > $OUT
-   fi  
-   time censo -solvent $s -inp crest_combi.xyz -part2 off -part1 on -part0 on -evaluate_rrho off -part0_threshold $ep0 -part1_threshold $ep1 -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
-   cp coord.enso_best coord
-   time crest -gesc+ enso_ensemble_part1.xyz -gescopt loose -alpb $s -nocross -norotmd -mdlen x1.0 -ewin $ep0 >> $OUT  
-        crest -for crest_conformers.xyz --cluster tightincr >> $OUT
-   rm -rf enso* CONF*
-   time censo -solvent $s -inp crest_clustered.xyz -OR $or -part4 $nmr -part3 $p3 -part2 on -part1 on -part0 on -part0_threshold $ep0 -part1_threshold $ep1 -optlevel2 $olev -chrg $chrg -u $uhf -inprc $censorc -P $P -O $O >> $OUT
-fi
-
-cd ..
-done
-
+  echo $ec $ep0 $ep1 $s1 $s2 $mode $run $OUT
+  
+  ########################## run
+  
+  for m in A B
+  do
+         s=$s1
+       uhf=$uhfa 
+      chrg=$chrga
+      [ "$m" = "B" ] && { s=$s2; uhf=$uhfb; chrg=$chrgb; }
+      #echo "system " $m ":" $chrg $uhf $s
+      if [ "$m" = "B" ] && [ "$run" = "or" ]; then
+          echo -e "\n#>>># CRENSO: All done!"
+          echo -e "\n#>>># CRENSO: All done!"  >> $OUT
+          exit
+      elif [ "$m" = "B" ] && [ "$run" = "nmr" ]; then
+          echo -e "\n#>>># CRENSO: All done!"
+          echo -e "\n#>>># CRENSO: All done!"  >> $OUT
+          exit
+      fi  
+      
+      cd $m
+      echo -e "\n#>>># Starting calculation in $m charge= $chrg uhf= $uhf solvent= $s" |tee -a $OUT
+      
+      echo $uhf > .UHF
+      echo $chrg > .CHRG
+      
+      rm -rf enso* CONF*
+      
+      if [ "$mode" = "0" ]; then   
+         ############## single structure mode for GFN2 opt input geometries ####
+         echo -e "#>>># Running single-structure mode in $m" 
+         echo -e "#>>># Running single-structure mode in $m"  >> $OUT
+         t2x coord > inp.xyz 2>/dev/null
+         xtb inp.xyz --alpb $s --opt vtight >> $OUT
+         mv xtbopt.xyz gfn2_opt.xyz
+         x2t gfn2_opt.xyz > coord 2>/dev/null
+         echo -e "#>>># Running CENSO single-structure mode in $m" 
+         echo -e "\n#>>># Running CENSO single-structure mode in $m \n"  >> $OUT
+         PARAMS0=(
+            -solvent $s
+            -chrg $chrg
+            -u $uhf
+            -inp gfn2_opt.xyz
+            -part0 off
+            -part1 $p1
+            -part2 $p2
+            -part3 $p3
+            -part4 $nmr
+            -OR $or
+            -optlevel2 $olev
+            -inprc $censorc
+            -P $P 
+            -O $O
+            -progress $progress
+         )
+         time censo ${PARAMS0[@]} >> $OUT
+         echo -e "#>>># CENSO: All done!"
+         echo -e "\n#>>># CENSO: All done!"  >> $OUT
+         if [ "$run" = "nmr" ]; then
+              echo -e "#>>># Creating anmr_nucinfo and anmr_rotamer files for $m " 
+              echo -e "\n#>>># Creating anmr_nucinfo and anmr_rotamer files for $m \n"  >> $OUT
+             # create anmr_nucinfo and anmr_rotamer
+             t2x coord.enso_best > crest_rotamers_0.xyz 2>/dev/null
+             crest coord.enso_best -cregen -nmr >> $OUT
+         fi  
+      fi  
+      if [ "$mode" = "1" ]; then    
+         ############## quick crest_combi ############# 
+         echo -e "#>>># Running quick crest_combi in $m"
+         echo -e "#>>># Running quick crest_combi in $m"  >> $OUT
+         if [ "$run" = "nmr" ]; then
+             time crest_combi -s $s -q -ewin $ec -T $T -nmr >> $OUT
+         else
+            time crest_combi -s $s -q -ewin $ec -T $T >> $OUT
+         fi
+         echo -e "#>>># Running CENSO after quick crest_combi in $m" 
+         echo -e "\n#>>># Running CENSO after quick crest_combi in $m \n"  >> $OUT
+         PARAMS1=(
+            -solvent $s
+            -chrg $chrg
+            -u $uhf
+            -inp crest_combi.xyz
+            -part0 on
+            -part0_threshold $ep0
+            -part1 on
+            -part1_threshold $ep1
+            -part2 $p2
+            -part3 $p3
+            -part4 $nmr
+            -OR $or
+            -optlevel2 $olev
+            -inprc $censorc
+            -P $P 
+            -O $O
+            -progress $progress
+         )
+         time censo ${PARAMS1[@]} >> $OUT
+         echo -e "#>>># CENSO: All done!"
+         echo -e "\n#>>># CENSO: All done!"  >> $OUT
+      fi 
+      if [ "$mode" = "2" ]; then    
+         ############## full crest_combi GESC GFN2 + DFT opt ############# 
+         echo -e "#>>># Running full crest_combi in $m" 
+         echo -e "#>>># Running full crest_combi in $m"  >> $OUT
+         if [ "$run" = "nmr" ]; then
+            time crest_combi -s $s    -ewin $ec -T $T -nmr >> $OUT
+         else
+            time crest_combi -s $s    -ewin $ec -T $T >> $OUT
+         fi
+         echo -e "#>>># Running CENSO after full crest_combi in $m "
+         echo -e "\n#>>># Running CENSO after full crest_combi in $m \n"  >> $OUT
+         PARAMS2start=(
+            -solvent $s
+            -chrg $chrg
+            -u $uhf
+            -inp crest_combi.xyz
+            -evaluate_rrho off
+            -part0 on
+            -part0_threshold $ep0
+            -part1 on
+            -part1_threshold $ep1
+            -part2 off
+            -part3 off
+            -part4 off
+            -OR off
+            -inprc $censorc
+            -P $P 
+            -O $O
+            -progress $progress
+         )
+         time censo ${PARAMS2start[@]} >> $OUT
+         echo -e "#>>># CENSO: All done!"
+         echo -e "\n#>>># CENSO: All done!"  >> $OUT
+         cp coord.enso_best coord
+         echo -e "#>>># Running CREST with geometric Energy Surface Correction (gESC) in $m" 
+         echo -e "\n#>>># Running CREST with geometric Energy Surface Correction (gESC) in $m \n"  >> $OUT
+         time crest -gesc+ enso_ensemble_part1.xyz -gescopt loose -alpb $s -nocross -norotmd -mdlen x1.0 -ewin $ep0 -T $T >> $OUT  
+              crest -for crest_conformers.xyz --cluster tightincr -T $T >> $OUT
+         rm -rf enso* CONF*
+         echo -e "#>>># Running CENSO after CREST[gESC] search in $m" 
+         echo -e "\n#>>># Running CENSO after CREST[gESC] search in $m \n"   >> $OUT
+         PARAMS2final=(
+            -solvent $s
+            -chrg $chrg 
+            -u $uhf  
+            -inp crest_clustered.xyz
+            -part0 on 
+            -part0_threshold $ep0
+            -part1 on
+            -part1_threshold $ep1
+            -part2 on
+            -optlevel2 $olev
+            -part3 $p3
+            -part4 $nmr
+            -OR $or
+            -inprc $censorc
+            -P $P 
+            -O $O
+            -progress $progress
+         )
+         time censo ${PARAMS2final[@]} >> $OUT
+         echo -e "#>>># CENSO: All done!"
+         echo -e "\n#>>># CENSO: All done!"  >> $OUT
+      fi
+      cd ..
+  done
 fi # run block
 
 ########################## print result (if no part1/2 out is present, a printout error message appears which can be ignored)
@@ -234,9 +349,9 @@ dg3=$(echo "scale=10; ($g23-($g13))*627.509541" | bc -l | gawk '{printf "  %12.6
 logk3=$(echo "scale=10; ($dg3)"   | bc -l | gawk '{printf "  %12.6f\n", ($1/0.592452)/2.302585}')
 pkal3=$(echo "scale=10; ($logk3)" | bc -l | gawk '{printf "  %12.3f\n", $1*0.890-170.0}')
 pka33=$(echo "scale=10; ($logk3)" | bc -l | gawk '{printf "  %12.3f\n", -1656.7+23.185*$1-0.11103*$1*$1+0.0001835*$1*$1*$1}')
-echo $g13 $g23        " G (A/B)  part3"                        
+echo $g13 $g23        " G (A/B)  part3"
 fi
-if [ "$s1" = "gas" ]; then           
+if [ "$s1" = "gas" ]; then
 g11=`grep '<<==part1==' A/$OUT | tail -1 | gawk '{print $4}'`
 else
 g11=`grep '<<==part1==' A/$OUT | tail -1 | gawk '{print $5}'`
@@ -260,7 +375,7 @@ dg2=$(echo "scale=10; ($g22-($g12))*627.509541" | bc -l | gawk '{printf "  %12.6
 logk2=$(echo "scale=10; ($dg2)"   | bc -l | gawk '{printf "  %12.6f\n", ($1/0.592452)/2.302585}')
 pkal2=$(echo "scale=10; ($logk2)" | bc -l | gawk '{printf "  %12.3f\n", $1*0.890-170.0}')
 pka32=$(echo "scale=10; ($logk2)" | bc -l | gawk '{printf "  %12.3f\n", -1656.7+23.185*$1-0.11103*$1*$1+0.0001835*$1*$1*$1}')
-echo $g12 $g22        " G (A/B)  part2"                        
+echo $g12 $g22        " G (A/B)  part2"
 fi
 if test -f A/coord.enso_best; then
    a=`head -1 A/coord.enso_best | gawk '{print $5}'`
@@ -279,3 +394,4 @@ else
    echo $logk3           " logK "$s2"-"$s1" part3"
 fi
 echo "================================================"
+echo -e "\n#>>># CRENSO: All done!"
