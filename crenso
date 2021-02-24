@@ -300,8 +300,8 @@ if [ "$mode" != "" ]; then # run block (else just print)
          cp coord.enso_best coord
          echo -e "#>>># Running CREST with geometric Energy Surface Correction (gESC) in $m" 
          echo -e "\n#>>># Running CREST with geometric Energy Surface Correction (gESC) in $m \n"  >> $OUT
-         time crest -gesc+ enso_ensemble_part1.xyz -gescopt loose -alpb $s -nocross -norotmd -mdlen x1.0 -ewin $ep0 >> $OUT  
-              crest -for crest_conformers.xyz --cluster tightincr >> $OUT
+         time crest -gesc+ enso_ensemble_part1.xyz -gescopt loose -alpb $s -nocross -norotmd -mdlen x1.0 -ewin $ep0 -T $T >> $OUT  
+              crest -for crest_conformers.xyz --cluster tightincr -T $T >> $OUT
          rm -rf enso* CONF*
          echo -e "#>>># Running CENSO after CREST[gESC] search in $m" 
          echo -e "\n#>>># Running CENSO after CREST[gESC] search in $m \n"   >> $OUT
