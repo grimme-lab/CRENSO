@@ -2,13 +2,13 @@
 
 echo '                                                           '
 echo '          ================================================='
-echo '          == crenso V 1.03,  SG, FB Feb 2021, MCTC UBonn =='
+echo '          == crenso V 1.0.3,  SG, FB Feb 2021, MCTC UBonn =='
 echo '          ================================================='
 echo ""
 echo 'Note: for -pka, the main (coord) dir must contain the correct .CHRG file for the acid'
-# V 1.01 Sun Jan 31 23:37:16 CET 2021 -kow/oa_fine flag added, part3 on
-# V 1.02 We  Feb 10 12:04:11 CET 2021 -nmr, -help, -P, -O flags added
-# V 1.03 Mo  Feb 22 15:22:35 CET 2021 added printout 
+# V 1.0.1 Sun Jan 31 23:37:16 CET 2021 -kow/oa_fine flag added, part3 on
+# V 1.0.2 We  Feb 10 12:04:11 CET 2021 -nmr, -help, -P, -O flags added
+# V 1.0.3 Mo  Feb 22 15:22:35 CET 2021 added printout 
 
 mode=""
 argcheck=y

@@ -16,11 +16,11 @@
 # PP & SG, 7/20-1/21
 ###############################################
 
-# V 1.02 Mo  Feb 22 15:25:46 CET 2021 added clearer printout
+# V 1.0.2 Mo  Feb 22 15:25:46 CET 2021 added clearer printout
 
 echo '                                                                 '
 echo '          ======================================================='
-echo '          == crest_combi V 1.02, SG/PP/FB Feb 2021, MCTC UBonn =='
+echo '          == crest_combi V 1.0.2, SG/PP/FB Feb 2021, MCTC UBonn =='
 echo '          ======================================================='
 
 #defaults
