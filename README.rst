@@ -43,12 +43,10 @@ For information on command line arguments use:
 Citation
 ========
 
-Cite:
+How to cite:
 
-Title: "Efficient quantum chemical calculation of structure ensembles and free 
-        energies for non-rigid molecules"
-Authors: Grimme, Stefan; Bohle, Fabian; Hansen, Andreas; Pracht, Philipp; 
-         Spicher, Sebastian; Stahn, Marcel
+Title: Efficient quantum chemical calculation of structure ensembles and free energies for non-rigid molecules
+Authors: Grimme, Stefan; Bohle, Fabian; Hansen, Andreas; Pracht, Philipp; Spicher, Sebastian; Stahn, Marcel
 
 further information will be updated once available.
 
