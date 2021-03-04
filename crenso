@@ -1,9 +1,9 @@
 #!/bin/bash
 
 echo '                                                           '
-echo '          ================================================='
+echo '          =================================================='
 echo '          == crenso V 1.0.3,  SG, FB Feb 2021, MCTC UBonn =='
-echo '          ================================================='
+echo '          =================================================='
 echo ""
 echo 'Note: for -pka, the main (coord) dir must contain the correct .CHRG file for the acid'
 # V 1.0.1 Sun Jan 31 23:37:16 CET 2021 -kow/oa_fine flag added, part3 on
