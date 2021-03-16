@@ -12,7 +12,6 @@ echo 'Note: for -pka, the main (coord) dir must contain the correct .CHRG file f
 
 mode=""
 argcheck=y
-optstr=$@
 or=off
 nmr=off
 OUT=crenso.out
@@ -20,7 +19,7 @@ T=6
 setT=off # logical for T = threads in CREST
 P=3 # threads in CENSO
 O=2 # cores per thread in CENSO
-censorc='~/.censorc'
+censorc="$HOME/.censorc"
 p3=off
 printhelp=off
 progress=on
@@ -32,6 +31,7 @@ while [ "$argcheck" = "y" ]; do
       "-l1"    )  mode=1;  p2=off ;;    # quick crest_combi + part0/1
       "-l1opt" )  mode=1;  p2=on  ;;    #   "        "      + part0/1/2 ie DFT opt
       "-l2"    )  mode=2          ;;    # full crest_combi + gesc+ part0/1/2 ie DFT opt
+      "-l3"    )  mode=3;  p2=on  ;;    # full crest_combi, NO-gesc, part0/1/2 in CENSO
 #                      EWINS:   CREST part0  part1
 #                                            2.0 kcal here yields reasonable thermal averages while more for OR are taken
 #                               8 kcal in crest is required because we really wanna have the best in spectro mode while in thermo mode, a close to best is ok
@@ -51,7 +51,7 @@ while [ "$argcheck" = "y" ]; do
       "-T"      ) shift; T=$1;  setT=on ;; 
       "-P"      ) shift; P=$1 ;; # independent parallel threads in CENSO            --> P * O = T
       "-O"      ) shift; O=$1 ;; # number of cores for independent threads in CENSO --> P * O = T
-      "-inprc"  ) shift; censorc=$1; echo $censorc ;; # explicit path to censorc
+      "-inprc"  ) shift; censorc=$1 ;; # explicit path to censorc
       "-h"      ) printhelp=on;;
       "--help"  ) printhelp=on;;
       esac
@@ -70,6 +70,7 @@ if [ $printhelp == on ];then
     echo "-l1                = quick crest_combi + CENSO[part0/1]"
     echo "-l1opt             = quick crest_combi + CENSO[part0/1/2] i.e. DFT optimization"
     echo "-l2                =  full crest_combi + gESC + CENSO[part0/1/2]"
+    echo "-l3                =  full crest_combi + CENSO[part0/1/2]  (NO gESC)"
     echo "-pka               = pka calculation for acid (A) and base (B) in water"
     echo "-kow               = 1-octanol/water partition coefficent calculation"
     echo "-kow_fine          = 1-octanol/water partition coefficient calculation using CENSO[part3] for COSMO-RS[FINE]"
@@ -106,9 +107,11 @@ fi
 
 # determine T from P and O
 if [ $setT != on ];then
-    T=$(expr $P \* $O)
+    T=$(($P * $O))
     echo "Total number of CPUs(threads) (T) is set to $T"
 fi
+
+startdir=$PWD
 
 if [ "$mode" != "" ]; then # run block (else just print)
   ########################## prepare
@@ -117,16 +120,16 @@ if [ "$mode" != "" ]; then # run block (else just print)
    uhfa=0
    uhfb=0
   if test -f .CHRG; then
-   chrga=`cat .CHRG`
-   chrgb=`cat .CHRG`
+   chrga=$(cat .CHRG)
+   chrgb=$(cat .CHRG)
   fi
   if test -f .UHF; then
-   uhfa=`cat .UHF`
-   uhfb=`cat .UHF`
+   uhfa=$(cat .UHF)
+   uhfb=$(cat .UHF)
   fi
   if test -f .UHFA; then
-   uhfa=`cat .UHFA`
-   uhfb=`cat .UHFB`
+   uhfa=$(cat .UHFA)
+   uhfb=$(cat .UHFB)
   fi
 
   if [ "$run" = "pka" ]; then
@@ -163,7 +166,7 @@ if [ "$mode" != "" ]; then # run block (else just print)
       cp coord A
   fi
 
-  echo $ec $ep0 $ep1 $s1 $s2 $mode $run $OUT
+  echo "$ec $ep0 $ep1 $s1 $s2 $mode $run $OUT"
   
   ########################## run
   
@@ -187,8 +190,8 @@ if [ "$mode" != "" ]; then # run block (else just print)
       cd $m
       echo -e "\n#>>># Starting calculation in $m charge= $chrg uhf= $uhf solvent= $s" |tee -a $OUT
       
-      echo $uhf > .UHF
-      echo $chrg > .CHRG
+      echo "$uhf" > .UHF
+      echo "$chrg" > .CHRG
       
       rm -rf enso* CONF*
       
@@ -328,7 +331,45 @@ if [ "$mode" != "" ]; then # run block (else just print)
          echo -e "#>>># CENSO: All done!"
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
       fi
-      cd ..
+################################################################################
+      if [ "$mode" = "3" ]; then
+        # MODE3 = CREST_COMBI + CENSO with optimization (NO gESC)
+         ############## full crest_combi GFN2 + DFT opt ############# 
+         echo -e "#>>># Running full crest_combi in $m in MODE 3 (no gESC)" 
+         echo -e "#>>># Running full crest_combi in $m in MODE 3 (no gESC)"  >> $OUT
+         if [ "$run" = "nmr" ]; then
+            time crest_combi -s $s    -ewin $ec -T $T -nmr >> $OUT
+         else
+            time crest_combi -s $s    -ewin $ec -T $T >> $OUT
+         fi
+         rm -rf enso* CONF*
+         echo -e "#>>># Running CENSO after full crest_combi in $m "
+         echo -e "\n#>>># Running CENSO after full crest_combi in $m \n"  >> $OUT
+         PARAMS3=(
+            -solvent $s
+            -chrg $chrg 
+            -u $uhf  
+            -inp crest_combi.xyz
+            -part0 on 
+            -part0_threshold $ep0
+            -part1 on
+            -part1_threshold $ep1
+            -part2 on
+            -optlevel2 $olev
+            -part3 $p3
+            -part4 $nmr
+            -OR $or
+            -inprc $censorc
+            -P $P 
+            -O $O
+            -progress $progress
+         )
+         time censo "${PARAMS3[@]}" >> $OUT
+         echo -e "#>>># CENSO: All done!"
+         echo -e "\n#>>># CENSO: All done!"  >> $OUT
+      fi
+################################################################################
+      cd $startdir
   done
 fi # run block
 
