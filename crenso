@@ -84,8 +84,8 @@ if [ $printhelp == on ];then
     echo "-or_fine [solvent] = optical roatatory dispersion calculation using larger energy windows/thresholds"
     echo "-nmr [solvent]     = NMR calculation, settings are determined from the CENSO global configuration file"
     echo "-T                 = number of threads used in CREST, can also be set by using P and O"
-    echo "-P                 = number of independent parallel cthreads in CENSO (P * O = T)"
-    echo "-O                 = number of cores for independent threads in CENSO (P * O = T)"
+    echo "-P                 = number of independent parallel threads in CENSO (P * O = T)"
+    echo "-O                 = number of cores per independent thread in CENSO (P * O = T)"
     echo "-inprc             = provide explicit absolute path to a CENSO global configuration file"
     echo "-h                 = print help message"
     echo ""
@@ -273,6 +273,9 @@ if [ "$mode" != "" ]; then # run block (else just print)
          echo -e "#>>># Running full crest_combi in $m"  >> $OUT
          if [ "$run" = "nmr" ]; then
             time crest_combi -s $s    -ewin $ec -T $T -nmr >> $OUT
+         elif [ "$run" = "or" ]; then
+            # increases number of clusters in crest_combi
+            time crest_combi -s $s    -ewin $ec -T $T -or >> $OUT
          else
             time crest_combi -s $s    -ewin $ec -T $T >> $OUT
          fi
