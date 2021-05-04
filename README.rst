@@ -1,3 +1,13 @@
+|GitHub release| |DOI|
+
+.. |GitHub release| image:: https://img.shields.io/github/v/release/grimme-lab/CRENSO
+   :target: https://github.com/grimme-lab/CRENSO/releases/latest
+
+
+.. |DOI| image:: https://img.shields.io/badge/DOI-10.1021/acs.jpca.1c00971-blue
+   :target: https://doi.org/10.1021/acs.jpca.1c00971
+
+
 ====================
 CRENSO / CREST_COMBI
 ====================
@@ -49,7 +59,12 @@ Title: Efficient quantum chemical calculation of structure ensembles and free en
 
 Authors: Grimme, Stefan; Bohle, Fabian; Hansen, Andreas; Pracht, Philipp; Spicher, Sebastian; Stahn, Marcel
 
-further information will be updated once available.
+General reference:
+
+S. Grimme, F. Bohle, A. Hansen, P. Pracht, S. Spicher, and M. Stahn 
+*J. Phys. Chem. A* **2021**, XXXX, XXX, XXX-XXX.
+
+DOI: `10.1021/acs.jpca.1c00971 <https://doi.org/10.1021/acs.jpca.1c00971>`_. 
 
 License
 =======

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ###############################################
 # script for performing crest runs at FF
@@ -18,15 +18,15 @@
 
 # V 1.0.2 Mo  Feb 22 15:25:46 CET 2021 added clearer printout
 
-echo '                                                                 '
+echo '                                                                  '
 echo '          ========================================================'
 echo '          == crest_combi V 1.0.2, SG/PP/FB Feb 2021, MCTC UBonn =='
 echo '          ========================================================'
 
 #defaults
-solv=gas         # solvent name
+solv="gas"         # solvent name
 ewin="8.0"       # energy window, do not take < 8 for larger drugs
-gbsa='-alpb '    # solvation model
+gbsa='-alpb'    # solvation model
 mode="ff"        # FF+GFN2(-screen)
 
 # settings for full, non-quick default mode, change by -q 
@@ -34,36 +34,37 @@ listd="0.0 0.5 1.5 2.0" # artificial dispersion
 listc="1 2 -1 -2"       #    "       ES
  xtff="x1.0"            # neutral run time
 xtffm="x2.0"            # artifical "  "
-nclust=500              # of clusters in itermediate steps
+nclust="500"              # of clusters in itermediate steps
 vfirst="-v4"            # algo for first neutral run
 nmr=""                  # create anmr_nucinfo and anmr_rotamer in first FF(v4) run
 
 threads=$OMP_NUM_THREADS  # set OMP threads (equivalent to using the -T option of crest)
-printhelp=off
-argcheck=y
-optstr=$@
+printhelp="off"
+argcheck="y"
+
 while [ "$argcheck" = "y" ]; do
    if [ -n "$1" ]; then
       case $1 in
-      "-q"    )           listd="0.5 1.5"; listc="1 -1"; xtffm="x0.5"; vfirst="-v3"; mode=ff; nclust=400 ;;
+      "-q"    )           listd="0.5 1.5"; listc="1 -1"; xtffm="x0.5"; vfirst="-v3"; mode="ff"; nclust="400" ;;
       "-s"    ) shift;    solv=$1 ;;
       "-solvent" ) shift; solv=$1 ;;
       "-g"    ) shift;    solv=$1 ;;
       "-ewin" ) shift;    ewin=$1 ;;
-      "-ffonly" )         mode=ff ;;
+      "-ffonly" )         mode="ff" ;;
       "-T" ) shift;       threads=$1 ;;
       "-threads" ) shift; threads=$1 ;;
-      "-nmr" ) shift;     nmr="-nmr" ;;
-      "-h"      ) printhelp=on;;
-      "--help"  ) printhelp=on;;
+      "-nmr" )            nmr="-nmr" ;;
+      "-or")              nclust="2000";;
+      "-h"      ) printhelp="on";;
+      "--help"  ) printhelp="on";;
       esac
       shift
    else
-      argcheck=n
+      argcheck="n"
    fi  
 done
 
-if [ $printhelp == on ];then
+if [ "$printhelp" == "on" ];then
     echo ""
     echo "Printing help message:"
     echo ""
@@ -89,23 +90,22 @@ if [ $printhelp == on ];then
 fi
 
 
-ewin2=$(echo "scale=10; ($ewin+4)" | bc -l | gawk '{print $1}') # ewin for intermediate FF run re-ranking with GFN2
-ewin3=$(echo "scale=10; ($ewin-2)" | bc -l | gawk '{print $1}') # ewin for last GFN2 search (if mode="")
+ewin2=$((ewin+4)) # ewin for intermediate FF run re-ranking with GFN2
+ewin3=$((ewin-2)) # ewin for last GFN2 search (if mode="")
 
 #########################
 #search on FF level
 #########################
 # neutral
 rm -f gfnff_topo
-#echo 'CREST 1 (FF,"$vfirst")...' 
 echo -e "#>>># Running: CREST 1 (FF,$vfirst)" >&2
 echo -e "#>>># Running: CREST 1 (FF,$vfirst)" 
 
 if [ "$nmr" == "-nmr" ]; then
     echo 'Generating anmr_nucinfo and anmr_rotamers files for possible subsequent NMR calculation'
-    crest coord $gbsa $solv -gfnff $vfirst -cluster $nclust -ewin $ewin -norotmd -nocross -mdlen $xtff -T $threads $nmr
+    crest coord "$gbsa" "$solv" -gfnff "$vfirst" -cluster "$nclust" -ewin "$ewin" -norotmd -nocross -mdlen "$xtff" -T "$threads" "$nmr"
 else
-    crest coord $gbsa $solv -gfnff $vfirst -cluster $nclust -ewin $ewin -norotmd -nocross -mdlen $xtff -T $threads
+    crest coord "$gbsa" "$solv" -gfnff "$vfirst" -cluster "$nclust" -ewin "$ewin" -norotmd -nocross -mdlen "$xtff" -T "$threads"
 fi
 mv crest_conformers.xyz crest_tmp.xyz
 mv crest_best.xyz best_gfnff.xyz
@@ -116,32 +116,31 @@ for dscal in $listd
 do
 echo -e "#>>># Running: CREST (FF+/-disp)... $dscal" >&2
 echo -e "#>>># Running: CREST (FF+/-disp)... $dscal"
-#echo 'CREST (FF+/-disp)...' $dscal
 rm -f gfnff_topo
 # search with scaled dispersion interaction via the "-dispscal" command
-crest best_gfnff.xyz -gfnff -cluster $nclust -ewin $ewin -dispscal $dscal -norotmd -norestart -nocross -mdlen $xtffm -T $threads
+crest best_gfnff.xyz -gfnff -cluster "$nclust" -ewin "$ewin" -dispscal "$dscal" -norotmd -norestart -nocross -mdlen "$xtffm" -T "$threads"
 cat crest_clustered.xyz >> search_gfnff.xyz
 done
 
 chrg=0
 if test -f .CHRG; then
- chrg=`cat .CHRG`
+ chrg=$(cat .CHRG)
 fi
 
 # artificial 2
 for c in $listc
 do
-chrgmod=$(echo "scale=10; ($chrg+$c)" | bc -l | gawk '{print $1}')
+chrgmod=$((chrg+c))
 echo -e "#>>># Running: CREST (FF+/-charge)... $chrgmod" >&2
 echo -e "#>>># Running: CREST (FF+/-charge)... $chrgmod"
 #echo 'CREST (FF+/-charge)...' $chrgmod
 rm -f gfnff_topo
-echo $chrgmod > .CHRG
+echo "$chrgmod" > .CHRG
 # search with modified molecular charge +/-{1,2}
-crest best_gfnff.xyz -gfnff -cluster $nclust -ewin $ewin -norotmd -norestart -nocross -mdlen $xtffm -T $threads
+crest best_gfnff.xyz -gfnff -cluster "$nclust" -ewin "$ewin" -norotmd -norestart -nocross -mdlen "$xtffm" -T "$threads"
 cat crest_clustered.xyz >> search_gfnff.xyz
 done
-echo $chrg > .CHRG
+echo "$chrg" > .CHRG
 
 # GFN2 opt
 echo 'CREST screen (GFN2)...' 
@@ -150,19 +149,19 @@ rm -f gfnff_topo
 #1. energy re-rank (at FF level) because of +/-disp/ES structures (output: crest_ensemble.xyz)
 echo -e "#>>># Running: CREST structure optimization and energy reranking because of artificial search" >&2
 echo -e "#>>># Running: CREST structure optimization and energy reranking because of artificial search"
-crest -mdopt search_gfnff.xyz $gbsa $solv -opt crude -gfnff -ewin $ewin2 -T $threads  
+crest -mdopt search_gfnff.xyz "$gbsa" "$solv" -opt crude -gfnff -ewin "$ewin2" -T "$threads"  
 #2. Sorting of the optimized ensemble (output: overwritten crest_ensemble.xyz)
 echo -e "#>>># Running: CREST (cregen) ensemble sorting" >&2
 echo -e "#>>># Running: CREST (cregen) ensemble sorting"
-crest -cregen crest_ensemble.xyz -ewin $ewin -ethr 0.1 und -rthr 0.2 -bthr 0.03 -T $threads
+crest -cregen crest_ensemble.xyz -ewin "$ewin" -ethr 0.1 und -rthr 0.2 -bthr 0.03 -T "$threads"
 #3. GFN2 full opt (output: overwritten crest_ensemble.xyz)
 echo -e "#>>># Running: CREST GFN2 full optimization" >&2
 echo -e "#>>># Running: CREST GFN2 full optimization"
-crest $gbsa $solv -screen crest_ensemble.xyz -opt vtight -gfn2 -ewin $ewin -T $threads
+crest "$gbsa" "$solv" -screen crest_ensemble.xyz -opt vtight -gfn2 -ewin "$ewin" -T "$threads"
 #4. PCA/k-Means clustering of final ensemble (output: crest_clustered.xyz)
 echo -e "#>>># Running: CREST initial FF PCA/k-Means clustering" >&2
 echo -e "#>>># Running: CREST initial FF PCA/k-Means clustering"
-crest -for crest_ensemble.xyz -cluster $nclust -ewin $ewin -T $threads
+crest -for crest_ensemble.xyz -cluster "$nclust" -ewin "$ewin" -T "$threads"
 mv crest_clustered.xyz search_gfnff.xyz
 mv crest_best.xyz        best_gfnff.xyz
 
@@ -172,19 +171,19 @@ mv crest_best.xyz        best_gfnff.xyz
 if [ "$mode" = "ff" ]; then
    echo -e "#>>># Running: CREST final PCA/k-Means clustering for FF" >&2
    echo -e "#>>># Running: CREST final PCA/k-Means clustering for FF" 
-   crest -for search_gfnff.xyz -cluster tightincr -ewin $ewin -T $threads 
+   crest -for search_gfnff.xyz -cluster tightincr -ewin "$ewin" -T "$threads" 
    mv crest_clustered.xyz crest_combi.xyz
 else
 ###############################################################
 #search on GFN2 level starting with best at GFN2 opt from FF SE
 ###############################################################
-   echo 'CREST 8 (GFN2) ...' $level2
+   echo "CREST 8 (GFN2) ... "
    echo -e "#>>># Running: CREST GFN2 search starting from FF SE = CREST 8 (GFN2) ... $level2" >&2
    echo -e "#>>># Running: CREST GFN2 search starting from FF SE = CREST 8 (GFN2) ... $level2"
-   crest best_gfnff.xyz $gbsa $solv -gfn2 -ewin $ewin3 -norotmd -nocross -mdlen x1.0 -T $threads
+   crest best_gfnff.xyz "$gbsa" "$solv" -gfn2 -ewin "$ewin3" -norotmd -nocross -mdlen x1.0 -T "$threads"
    echo -e "#>>># Running: CREST GFN2 PCA/k-Means clustering into $nclust cluster" >&2
    echo -e "#>>># Running: CREST GFN2 PCA/k-Means clustering into $nclust cluster"
-   crest -for crest_conformers.xyz -cluster $nclust -T $threads
+   crest -for crest_conformers.xyz -cluster "$nclust" -T "$threads"
    mv crest_best.xyz        best_gfn2.xyz
    mv crest_clustered.xyz search_gfn2.xyz
    
@@ -194,13 +193,13 @@ else
    echo 'CREST final cregen ...'
    echo -e "#>>># Running: CREST (cregen) sorting final (FF/SQM) ensemble" >&2
    echo -e "#>>># Running: CREST (cregen) sorting final (FF/SQM) ensemble"
-   crest -cregen final.xyz -ewin $ewin -T $threads
+   crest -cregen final.xyz -ewin "$ewin" -T "$threads"
    echo -e "#>>># Running: CREST PCA/k-Means clustering for final (FF/SQM) ensemble" >&2
    echo -e "#>>># Running: CREST PCA/k-Means clustering for final (FF/SQM) ensemble"
-   crest -for crest_ensemble.xyz -cluster $nclust -ewin $ewin -T $threads
+   crest -for crest_ensemble.xyz -cluster "$nclust" -ewin "$ewin" -T "$threads"
    echo -e "#>>># Running: CREST final PCA/k-Means clustering for final (FF/SQM) ensemble" >&2
    echo -e "#>>># Running: CREST final PCA/k-Means clustering for final (FF/SQM) ensemble"
-   crest -for crest_clustered.xyz -cluster tightincr -ewin $ewin -T $threads
+   crest -for crest_clustered.xyz -cluster tightincr -ewin "$ewin" -T "$threads"
    cp crest_clustered.xyz crest_combi.xyz
 fi
 
