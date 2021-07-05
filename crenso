@@ -24,6 +24,7 @@ censorc="$HOME/.censorc"
 p3=off
 printhelp=off
 progress=on
+change_solvent="off"
 while [ "$argcheck" = "y" ]; do
    if [ -n "$1" ]; then
       case $1 in
@@ -70,7 +71,7 @@ if [ $printhelp == on ];then
     echo "Printing help message:"
     echo ""
     echo "-l0                = single structure mode for GFN2 opt input geometries"
-    echo "-l0opt             = single structure mode for  DFT opt input geometries (check or geom. effect)"
+    echo "-l0opt             = single structure mode for DFT opt input geometries (check or geom. effect)"
     echo "-l1                = quick crest_combi + CENSO[part0/1]"
     echo "-l1opt             = quick crest_combi + CENSO[part0/1/2] i.e. DFT optimization"
     echo "-l2                =  DEPRECATED !!!!!!!!  full crest_combi + gESC + CENSO[part0/1/2]"
@@ -186,10 +187,6 @@ if [ "$mode" != "" ]; then # run block (else just print)
       cp coord A
   fi
   if [ "$run" == "vaporpressure" ]; then
-      if [ "$mode" == "0" ]; then
-        echo "LEVEL l0 does not make sense with vapor_pressure calculation!"
-        exit
-      fi
       echo 'Performing vapor pressure calculation'
       rm -rf A B
       mkdir A
@@ -245,6 +242,9 @@ if [ "$mode" != "" ]; then # run block (else just print)
             echo '  }' >> same_solvent.json
             echo '}' >> same_solvent.json
           fi
+          if [ "$mode" != "0" ]; then
+              echo "CREST is using alpb $s1_alpb"
+          fi
       elif [ "$run" == "vaporpressure" ] && [ "$s" == "gas" ]; then
           vp='off'
       fi
@@ -260,11 +260,19 @@ if [ "$mode" != "" ]; then # run block (else just print)
          echo -e "#>>># Running single-structure mode in $m" 
          echo -e "#>>># Running single-structure mode in $m"  >> $OUT
          t2x coord > inp.xyz 2>/dev/null
+         if [ "$run" == "vaporpressure" ] && [ "$s" != "gas" ]; then
+            s=$s1_alpb
+            change_solvent="on"
+         fi
          xtb inp.xyz --alpb $s --opt vtight >> $OUT
          mv xtbopt.xyz gfn2_opt.xyz
          x2t gfn2_opt.xyz > coord 2>/dev/null
          echo -e "#>>># Running CENSO single-structure mode in $m" 
          echo -e "\n#>>># Running CENSO single-structure mode in $m \n"  >> $OUT
+         if [ "$run" == "vaporpressure" ] && [ "$change_solvent" == "on" ]; then
+            s="same"
+            change_solvent="off"
+         fi
          PARAMS0=(
             -solvent "$s"
             -chrg "$chrg"
@@ -298,6 +306,10 @@ if [ "$mode" != "" ]; then # run block (else just print)
          ############## quick crest_combi ############# 
          echo -e "#>>># Running quick crest_combi in $m"
          echo -e "#>>># Running quick crest_combi in $m"  >> $OUT
+         if [ "$run" == "vaporpressure" ] && [ "$s" != "gas" ]; then
+            s=$s1_alpb
+            change_solvent="on"
+         fi
          if [ "$run" == "nmr" ]; then
              time crest_combi -s "$s" -q -ewin "$ec" -T "$T" -nmr >> $OUT
          else
@@ -305,6 +317,10 @@ if [ "$mode" != "" ]; then # run block (else just print)
          fi
          echo -e "#>>># Running CENSO after quick crest_combi in $m" 
          echo -e "\n#>>># Running CENSO after quick crest_combi in $m \n"  >> $OUT
+         if [ "$run" == "vaporpressure" ] && [ "$change_solvent" == "on" ]; then
+            s="same"
+            change_solvent="off"
+         fi
          PARAMS1=(
             -solvent "$s"
             -chrg "$chrg"
@@ -334,6 +350,10 @@ if [ "$mode" != "" ]; then # run block (else just print)
          ############## full crest_combi GESC GFN2 + DFT opt ############# 
          echo -e "#>>># Running full crest_combi in $m" 
          echo -e "#>>># Running full crest_combi in $m"  >> $OUT
+         if [ "$run" == "vaporpressure" ] && [ "$s" != "gas" ]; then
+            s=$s1_alpb
+            change_solvent="on"
+         fi
          if [ "$run" = "nmr" ]; then
             time crest_combi -s "$s"    -ewin "$ec" -T "$T" -nmr >> $OUT
          elif [ "$run" = "or" ]; then
@@ -344,6 +364,10 @@ if [ "$mode" != "" ]; then # run block (else just print)
          fi
          echo -e "#>>># Running CENSO after full crest_combi in $m "
          echo -e "\n#>>># Running CENSO after full crest_combi in $m \n"  >> $OUT
+         if [ "$run" == "vaporpressure" ] && [ "$change_solvent" == "on" ]; then
+            s="same"
+            change_solvent="off"
+         fi
          PARAMS2start=(
             -solvent "$s"
             -chrg "$chrg"
@@ -371,11 +395,19 @@ if [ "$mode" != "" ]; then # run block (else just print)
          cp coord.enso_best coord
          echo -e "#>>># Running CREST with geometric Energy Surface Correction (gESC) in $m" 
          echo -e "\n#>>># Running CREST with geometric Energy Surface Correction (gESC) in $m \n"  >> $OUT
+         if [ "$run" == "vaporpressure" ] && [ "$s" != "gas" ]; then
+            s=$s1_alpb
+            change_solvent="on"
+         fi
          time crest -gesc+ enso_ensemble_part1.xyz -gescopt loose -alpb "$s" -nocross -norotmd -mdlen x1.0 -ewin "$ep0" -T "$T" >> "$OUT"
               crest -for crest_conformers.xyz --cluster tightincr -T "$T" >> $OUT
          rm -rf enso* CONF*
          echo -e "#>>># Running CENSO after CREST[gESC] search in $m" 
          echo -e "\n#>>># Running CENSO after CREST[gESC] search in $m \n"   >> $OUT
+         if [ "$run" == "vaporpressure" ] && [ "$change_solvent" == "on" ]; then
+            s="same"
+            change_solvent="off"
+         fi
          PARAMS2final=(
             -solvent "$s"
             -chrg "$chrg"
@@ -407,6 +439,10 @@ if [ "$mode" != "" ]; then # run block (else just print)
          ############## full crest_combi GFN2 + DFT opt ############# 
          echo -e "#>>># Running full crest_combi in $m in MODE 3 (no gESC)" 
          echo -e "#>>># Running full crest_combi in $m in MODE 3 (no gESC)"  >> $OUT
+         if [ "$run" == "vaporpressure" ] && [ "$s" != "gas" ]; then
+            s=$s1_alpb
+            change_solvent="on"
+         fi
          if [ "$run" = "nmr" ]; then
             time crest_combi -s "$s"    -ewin "$ec" -T "$T" -nmr >> $OUT
          else
@@ -415,6 +451,10 @@ if [ "$mode" != "" ]; then # run block (else just print)
          rm -rf enso* CONF*
          echo -e "#>>># Running CENSO after full crest_combi in $m "
          echo -e "\n#>>># Running CENSO after full crest_combi in $m \n"  >> $OUT
+         if [ "$run" == "vaporpressure" ] && [ "$change_solvent" == "on" ]; then
+            s="same"
+            change_solvent="off"
+         fi
          PARAMS3=(
             -solvent "$s"
             -chrg "$chrg"
@@ -441,13 +481,13 @@ if [ "$mode" != "" ]; then # run block (else just print)
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
       fi
 ################################################################################
-      cd $startdir
+      cd "$startdir"
   done
 fi # run block
 
 
 if [ "$run" == "vaporpressure" ]; then
-    echo "===================================================="
+    printf "\n====================================================\n"
     echo "Vapor pressure evaluation: "
     # p = p0 * exp(-ΔG/RT)
     # ΔG = Gvapor -Gliquid
