@@ -20,7 +20,7 @@
 
 echo '                                                                  '
 echo '          ========================================================'
-echo '          == crest_combi V 1.0.2, SG/PP/FB Feb 2021, MCTC UBonn =='
+echo '          == crest_combi V 1.0.3, SG/PP/FB Feb 2021, MCTC UBonn =='
 echo '          ========================================================'
 
 #defaults
@@ -86,6 +86,10 @@ if [ "$printhelp" == "on" ];then
     echo ""
     echo "Example usage:"
     echo " $ crest_combi -solvent h2o -q -T 8 > crest_combi.out"
+    echo ""
+    echo "Please consider citing:"
+    echo "S. Grimme, F. Bohle, A. Hansen, P. Pracht, S. Spicher, and M. Stahn J. Phys. Chem. A 2021, 125, 19, 4039–4054."
+    echo "https://doi.org/10.1021/acs.jpca.1c00971"
     exit
 fi
 
@@ -107,9 +111,16 @@ if [ "$nmr" == "-nmr" ]; then
 else
     crest coord "$gbsa" "$solv" -gfnff "$vfirst" -cluster "$nclust" -ewin "$ewin" -norotmd -nocross -mdlen "$xtff" -T "$threads"
 fi
-mv crest_conformers.xyz crest_tmp.xyz
-mv crest_best.xyz best_gfnff.xyz
-cat crest_clustered.xyz > search_gfnff.xyz
+# move old files
+if [ -f "crest_conformers.xyz" ]; then
+    mv crest_conformers.xyz crest_tmp.xyz
+fi
+if [ -f "crest_best.xyz" ]; then
+    mv crest_best.xyz best_gfnff.xyz
+fi
+if [ -f "crest_clustered.xyz" ]; then
+    cat crest_clustered.xyz > search_gfnff.xyz
+fi
 
 # artificial 1
 for dscal in $listd
@@ -178,8 +189,8 @@ else
 #search on GFN2 level starting with best at GFN2 opt from FF SE
 ###############################################################
    echo "CREST 8 (GFN2) ... "
-   echo -e "#>>># Running: CREST GFN2 search starting from FF SE = CREST 8 (GFN2) ... $level2" >&2
-   echo -e "#>>># Running: CREST GFN2 search starting from FF SE = CREST 8 (GFN2) ... $level2"
+   echo -e "#>>># Running: CREST GFN2 search starting from FF SE = CREST 8 (GFN2) " >&2
+   echo -e "#>>># Running: CREST GFN2 search starting from FF SE = CREST 8 (GFN2) "
    crest best_gfnff.xyz "$gbsa" "$solv" -gfn2 -ewin "$ewin3" -norotmd -nocross -mdlen x1.0 -T "$threads"
    echo -e "#>>># Running: CREST GFN2 PCA/k-Means clustering into $nclust cluster" >&2
    echo -e "#>>># Running: CREST GFN2 PCA/k-Means clustering into $nclust cluster"

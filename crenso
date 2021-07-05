@@ -2,13 +2,14 @@
 
 echo '                                                           '
 echo '          =================================================='
-echo '          == crenso V 1.0.3,  SG, FB Feb 2021, MCTC UBonn =='
+echo '          == crenso V 1.0.4,  SG, FB Feb 2021, MCTC UBonn =='
 echo '          =================================================='
 echo ""
-echo 'Note: for -pka, the main (coord) dir must contain the correct .CHRG file for the acid'
+
 # V 1.0.1 Sun Jan 31 23:37:16 CET 2021 -kow/oa_fine flag added, part3 on
 # V 1.0.2 We  Feb 10 12:04:11 CET 2021 -nmr, -help, -P, -O flags added
 # V 1.0.3 Mo  Feb 22 15:22:35 CET 2021 added printout 
+# V 1.0.4 Mo  Jul 05 11:04:10 CET 2021 added vapor pressure option
 
 mode=""
 argcheck=y
@@ -52,6 +53,9 @@ while [ "$argcheck" = "y" ]; do
       "-P"      ) shift; P=$1 ;; # independent parallel threads in CENSO            --> P * O = T
       "-O"      ) shift; O=$1 ;; # number of cores for independent threads in CENSO --> P * O = T
       "-inprc"  ) shift; censorc=$1 ;; # explicit path to censorc
+      "-vp"     ) shift; s1_alpb=$1; shift; s1_eps=$1; shift; s1_dcosmors=$1; s1='same'; s2=gas; run="vaporpressure"; vp="on"; ec=6; ep0=3; ep1=2.0; olev=lax; p3=off; p1=on ;;  # calculate vapor pressure
+      "-vp_fine") shift; s1_alpb=$1; shift; s1_eps=$1; shift; s1_dcosmors=$1; s1='same'; s2=gas; run="vaporpressure"; vp="on"; ec=6; ep0=3; ep1=2.0; olev=lax; p3=on; p1=on ;;  # calculate vapor pressure
+      "-temperature") shift; temperature=$1 ;; 
       "-h"      ) printhelp=on;;
       "--help"  ) printhelp=on;;
       esac
@@ -69,7 +73,7 @@ if [ $printhelp == on ];then
     echo "-l0opt             = single structure mode for  DFT opt input geometries (check or geom. effect)"
     echo "-l1                = quick crest_combi + CENSO[part0/1]"
     echo "-l1opt             = quick crest_combi + CENSO[part0/1/2] i.e. DFT optimization"
-    echo "-l2                =  full crest_combi + gESC + CENSO[part0/1/2]"
+    echo "-l2                =  DEPRECATED !!!!!!!!  full crest_combi + gESC + CENSO[part0/1/2]"
     echo "-l3                =  full crest_combi + CENSO[part0/1/2]  (NO gESC)"
     echo "-pka               = pka calculation for acid (A) and base (B) in water"
     echo "-kow               = 1-octanol/water partition coefficent calculation"
@@ -83,6 +87,11 @@ if [ $printhelp == on ];then
     echo "-or [solvent]      = optical roatatory dispersion calculation"
     echo "-or_fine [solvent] = optical roatatory dispersion calculation using larger energy windows/thresholds"
     echo "-nmr [solvent]     = NMR calculation, settings are determined from the CENSO global configuration file"
+    echo "-vp [solvent_alpb] [epsilon] [solvent_dcosmors] = vapor pressure calculation: e.g. -vp thf 7.8 thf "
+    echo "                    only available with COSMO-RS "
+    echo "-vp_fine [solvent_alpb] [epsilon] [solvent_dcosmors] = vapor pressure calculation: e.g. -vp thf 7.8 thf "
+    echo "                    only available with COSMO-RS "
+    echo "-temperature [temperature] = temperature used in free energy evaluation in CENSO: e.g. -temperature 298.15"
     echo "-T                 = number of threads used in CREST, can also be set by using P and O"
     echo "-P                 = number of independent parallel threads in CENSO (P * O = T)"
     echo "-O                 = number of cores per independent thread in CENSO (P * O = T)"
@@ -101,19 +110,29 @@ if [ $printhelp == on ];then
     echo ""
     echo "Produce printout for pka kow after previous calculation:"
     echo " $ crenso -pka > output.crenso &"
+    echo ""
+    echo "Please consider citing:"
+    echo "S. Grimme, F. Bohle, A. Hansen, P. Pracht, S. Spicher, and M. Stahn J. Phys. Chem. A 2021, 125, 19, 4039–4054."
+    echo "https://doi.org/10.1021/acs.jpca.1c00971"
     exit
 fi
 
 
 # determine T from P and O
 if [ $setT != on ];then
-    T=$(($P * $O))
-    echo "Total number of CPUs(threads) (T) is set to $T"
+    T=$((P * O))
+    printf "Total number of CPUs(threads) (T) is set to $T \n\n"
 fi
 
 startdir=$PWD
 
+if [ -z "$temperature" ]; then
+  temperature=298.15
+fi
+
+
 if [ "$mode" != "" ]; then # run block (else just print)
+
   ########################## prepare
   chrga=0
   chrgb=0
@@ -132,7 +151,8 @@ if [ "$mode" != "" ]; then # run block (else just print)
    uhfb=$(cat .UHFB)
   fi
 
-  if [ "$run" = "pka" ]; then
+  if [ "$run" == "pka" ]; then
+   echo 'Note: for -pka, the main (coord) dir must contain the correct .CHRG file for the acid'
    chrgb=$(echo "scale=10; ($chrga-1)" | bc -l | gawk '{print $1}')
    if test ! -d A; then
       echo "generate A/B dirs first using pkaquick!"
@@ -153,21 +173,41 @@ if [ "$mode" != "" ]; then # run block (else just print)
        cp coord B
       fi
   done
-  if [ "$run" = "or" ]; then
+  if [ "$run" == "or" ]; then
    rm -rf A 
    mkdir A 
    cp coord A
   fi
-  if [ "$run" = "nmr" ]; then
+  if [ "$run" == "nmr" ]; then
       echo 'Performing NMR property calculations'
       echo 'All CENSO settings concerning NMR are read from your CENSO global configuration file .censorc'
       rm -rf A 
       mkdir A 
       cp coord A
   fi
+  if [ "$run" == "vaporpressure" ]; then
+      if [ "$mode" == "0" ]; then
+        echo "LEVEL l0 does not make sense with vapor_pressure calculation!"
+        exit
+      fi
+      echo 'Performing vapor pressure calculation'
+      rm -rf A B
+      mkdir A
+      mkdir B
+      cp coord A
+      cp coord B
+  fi
 
-  echo "$ec $ep0 $ep1 $s1 $s2 $mode $run $OUT"
-  
+  echo "**************************************"
+  echo "CREST energy window  : $ec kcal/mol"
+  echo "CENSO threshold part0: $ep0 kcal/mol"
+  echo "CENSO threshold part1: $ep1 kcal/mol"
+  echo "applied solvent1     : $s1"
+  echo "applied solvent2     : $s2"
+  echo "level treatment      : $mode"
+  echo "property             : $run"
+  echo "output file          : $OUT"
+  echo "**************************************"
   ########################## run
   
   for m in A B
@@ -175,13 +215,13 @@ if [ "$mode" != "" ]; then # run block (else just print)
          s=$s1
        uhf=$uhfa 
       chrg=$chrga
-      [ "$m" = "B" ] && { s=$s2; uhf=$uhfb; chrg=$chrgb; }
+      [ "$m" == "B" ] && { s=$s2; uhf=$uhfb; chrg=$chrgb; }
       #echo "system " $m ":" $chrg $uhf $s
-      if [ "$m" = "B" ] && [ "$run" = "or" ]; then
+      if [ "$m" == "B" ] && [ "$run" == "or" ]; then
           echo -e "\n#>>># CRENSO: All done!"
           echo -e "\n#>>># CRENSO: All done!"  >> $OUT
           exit
-      elif [ "$m" = "B" ] && [ "$run" = "nmr" ]; then
+      elif [ "$m" == "B" ] && [ "$run" == "nmr" ]; then
           echo -e "\n#>>># CRENSO: All done!"
           echo -e "\n#>>># CRENSO: All done!"  >> $OUT
           exit
@@ -189,7 +229,27 @@ if [ "$mode" != "" ]; then # run block (else just print)
       
       cd $m
       echo -e "\n#>>># Starting calculation in $m charge= $chrg uhf= $uhf solvent= $s" |tee -a $OUT
-      
+      if [ "$run" == "vaporpressure" ] && [ "$s" != "gas" ]; then
+          if [ -f "../same_solvents.json" ]; then
+            echo "Copying file same_solvents.json !!!"
+            cp ../same_solvents.json .
+          else
+            echo '{' >> same_solvent.json
+            echo '  "same":{' >> same_solvent.json
+            echo '    "cosmors": ["same", "same"],' >> same_solvent.json
+            echo '    "dcosmors": [null, "'$s1_dcosmors'"],' >> same_solvent.json
+            echo '    "xtb": [null, "'$s1_alpb'"],' >> same_solvent.json
+            echo '    "cpcm": [null, null],' >> same_solvent.json
+            echo '    "smd": [null, null],' >> same_solvent.json
+            echo '    "DC": '$s1_eps >> same_solvent.json
+            echo '  }' >> same_solvent.json
+            echo '}' >> same_solvent.json
+          fi
+      elif [ "$run" == "vaporpressure" ] && [ "$s" == "gas" ]; then
+          vp='off'
+      fi
+
+
       echo "$uhf" > .UHF
       echo "$chrg" > .CHRG
       
@@ -206,26 +266,27 @@ if [ "$mode" != "" ]; then # run block (else just print)
          echo -e "#>>># Running CENSO single-structure mode in $m" 
          echo -e "\n#>>># Running CENSO single-structure mode in $m \n"  >> $OUT
          PARAMS0=(
-            -solvent $s
-            -chrg $chrg
-            -u $uhf
+            -solvent "$s"
+            -chrg "$chrg"
+            -u "$uhf"
             -inp gfn2_opt.xyz
             -part0 off
-            -part1 $p1
-            -part2 $p2
-            -part3 $p3
-            -part4 $nmr
-            -OR $or
-            -optlevel2 $olev
-            -inprc $censorc
-            -P $P 
-            -O $O
-            -progress $progress
+            -part1 "$p1"
+            -part2 "$p2"
+            -part3 "$p3"
+            -part4 "$nmr"
+            -OR "$or"
+            --vapor_pressure "$vp"
+            -optlevel2 "$olev"
+            -inprc "$censorc"
+            -P "$P"
+            -O "$O"
+            -progress "$progress"
          )
-         time censo ${PARAMS0[@]} >> $OUT
+         time censo "${PARAMS0[@]}" >> $OUT
          echo -e "#>>># CENSO: All done!"
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
-         if [ "$run" = "nmr" ]; then
+         if [ "$run" == "nmr" ]; then
               echo -e "#>>># Creating anmr_nucinfo and anmr_rotamer files for $m " 
               echo -e "\n#>>># Creating anmr_nucinfo and anmr_rotamer files for $m \n"  >> $OUT
              # create anmr_nucinfo and anmr_rotamer
@@ -237,135 +298,143 @@ if [ "$mode" != "" ]; then # run block (else just print)
          ############## quick crest_combi ############# 
          echo -e "#>>># Running quick crest_combi in $m"
          echo -e "#>>># Running quick crest_combi in $m"  >> $OUT
-         if [ "$run" = "nmr" ]; then
-             time crest_combi -s $s -q -ewin $ec -T $T -nmr >> $OUT
+         if [ "$run" == "nmr" ]; then
+             time crest_combi -s "$s" -q -ewin "$ec" -T "$T" -nmr >> $OUT
          else
-            time crest_combi -s $s -q -ewin $ec -T $T >> $OUT
+            time crest_combi -s "$s" -q -ewin "$ec" -T "$T" >> $OUT
          fi
          echo -e "#>>># Running CENSO after quick crest_combi in $m" 
          echo -e "\n#>>># Running CENSO after quick crest_combi in $m \n"  >> $OUT
          PARAMS1=(
-            -solvent $s
-            -chrg $chrg
-            -u $uhf
+            -solvent "$s"
+            -chrg "$chrg"
+            -u "$uhf"
             -inp crest_combi.xyz
             -part0 on
-            -part0_threshold $ep0
+            -part0_threshold "$ep0"
             -part1 on
-            -part1_threshold $ep1
-            -part2 $p2
-            -part3 $p3
-            -part4 $nmr
-            -OR $or
-            -optlevel2 $olev
-            -inprc $censorc
-            -P $P 
-            -O $O
-            -progress $progress
+            -part1_threshold "$ep1"
+            -part2 "$p2"
+            -part3 "$p3"
+            -part4 "$nmr"
+            -OR "$or"
+            --vapor_pressure "$vp"
+            -optlevel2 "$olev"
+            --temperature "$temperature"
+            -inprc "$censorc"
+            -P "$P"
+            -O "$O"
+            -progress "$progress"
          )
-         time censo ${PARAMS1[@]} >> $OUT
+         time censo "${PARAMS1[@]}" >> $OUT
          echo -e "#>>># CENSO: All done!"
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
       fi 
-      if [ "$mode" = "2" ]; then    
+      if [ "$mode" == "2" ]; then    
          ############## full crest_combi GESC GFN2 + DFT opt ############# 
          echo -e "#>>># Running full crest_combi in $m" 
          echo -e "#>>># Running full crest_combi in $m"  >> $OUT
          if [ "$run" = "nmr" ]; then
-            time crest_combi -s $s    -ewin $ec -T $T -nmr >> $OUT
+            time crest_combi -s "$s"    -ewin "$ec" -T "$T" -nmr >> $OUT
          elif [ "$run" = "or" ]; then
             # increases number of clusters in crest_combi
-            time crest_combi -s $s    -ewin $ec -T $T -or >> $OUT
+            time crest_combi -s "$s"    -ewin "$ec" -T "$T" -or >> $OUT
          else
-            time crest_combi -s $s    -ewin $ec -T $T >> $OUT
+            time crest_combi -s "$s"    -ewin "$ec" -T "$T" >> $OUT
          fi
          echo -e "#>>># Running CENSO after full crest_combi in $m "
          echo -e "\n#>>># Running CENSO after full crest_combi in $m \n"  >> $OUT
          PARAMS2start=(
-            -solvent $s
-            -chrg $chrg
-            -u $uhf
+            -solvent "$s"
+            -chrg "$chrg"
+            -u "$uhf"
             -inp crest_combi.xyz
             -evaluate_rrho off
             -part0 on
-            -part0_threshold $ep0
+            -part0_threshold "$ep0"
             -part1 on
-            -part1_threshold $ep1
+            -part1_threshold "$ep1"
             -part2 off
             -part3 off
             -part4 off
             -OR off
-            -inprc $censorc
-            -P $P 
-            -O $O
-            -progress $progress
+            --vapor_pressure off
+            --temperature "$temperature"
+            -inprc "$censorc"
+            -P "$P"
+            -O "$O"
+            -progress "$progress"
          )
-         time censo ${PARAMS2start[@]} >> $OUT
+         time censo "${PARAMS2start[@]}" >> $OUT
          echo -e "#>>># CENSO: All done!"
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
          cp coord.enso_best coord
          echo -e "#>>># Running CREST with geometric Energy Surface Correction (gESC) in $m" 
          echo -e "\n#>>># Running CREST with geometric Energy Surface Correction (gESC) in $m \n"  >> $OUT
-         time crest -gesc+ enso_ensemble_part1.xyz -gescopt loose -alpb $s -nocross -norotmd -mdlen x1.0 -ewin $ep0 -T $T >> $OUT  
-              crest -for crest_conformers.xyz --cluster tightincr -T $T >> $OUT
+         time crest -gesc+ enso_ensemble_part1.xyz -gescopt loose -alpb "$s" -nocross -norotmd -mdlen x1.0 -ewin "$ep0" -T "$T" >> "$OUT"
+              crest -for crest_conformers.xyz --cluster tightincr -T "$T" >> $OUT
          rm -rf enso* CONF*
          echo -e "#>>># Running CENSO after CREST[gESC] search in $m" 
          echo -e "\n#>>># Running CENSO after CREST[gESC] search in $m \n"   >> $OUT
          PARAMS2final=(
-            -solvent $s
-            -chrg $chrg 
-            -u $uhf  
+            -solvent "$s"
+            -chrg "$chrg"
+            -u "$uhf"
             -inp crest_clustered.xyz
             -part0 on 
-            -part0_threshold $ep0
+            -part0_threshold "$ep0"
             -part1 on
-            -part1_threshold $ep1
+            -part1_threshold "$ep1"
             -part2 on
-            -optlevel2 $olev
-            -part3 $p3
-            -part4 $nmr
-            -OR $or
-            -inprc $censorc
-            -P $P 
-            -O $O
-            -progress $progress
+            -optlevel2 "$olev"
+            -part3 "$p3"
+            -part4 "$nmr"
+            -OR "$or"
+            --vapor_pressure "$vp"
+            --temperature "$temperature"
+            -inprc "$censorc"
+            -P "$P" 
+            -O "$O"
+            -progress "$progress"
          )
-         time censo ${PARAMS2final[@]} >> $OUT
+         time censo "${PARAMS2final[@]}" >> $OUT
          echo -e "#>>># CENSO: All done!"
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
       fi
 ################################################################################
-      if [ "$mode" = "3" ]; then
+      if [ "$mode" == "3" ]; then
         # MODE3 = CREST_COMBI + CENSO with optimization (NO gESC)
          ############## full crest_combi GFN2 + DFT opt ############# 
          echo -e "#>>># Running full crest_combi in $m in MODE 3 (no gESC)" 
          echo -e "#>>># Running full crest_combi in $m in MODE 3 (no gESC)"  >> $OUT
          if [ "$run" = "nmr" ]; then
-            time crest_combi -s $s    -ewin $ec -T $T -nmr >> $OUT
+            time crest_combi -s "$s"    -ewin "$ec" -T "$T" -nmr >> $OUT
          else
-            time crest_combi -s $s    -ewin $ec -T $T >> $OUT
+            time crest_combi -s "$s"    -ewin "$ec" -T "$T" >> $OUT
          fi
          rm -rf enso* CONF*
          echo -e "#>>># Running CENSO after full crest_combi in $m "
          echo -e "\n#>>># Running CENSO after full crest_combi in $m \n"  >> $OUT
          PARAMS3=(
-            -solvent $s
-            -chrg $chrg 
-            -u $uhf  
+            -solvent "$s"
+            -chrg "$chrg"
+            -u "$uhf"  
             -inp crest_combi.xyz
             -part0 on 
-            -part0_threshold $ep0
+            -part0_threshold "$ep0"
             -part1 on
-            -part1_threshold $ep1
+            -part1_threshold "$ep1"
             -part2 on
-            -optlevel2 $olev
-            -part3 $p3
-            -part4 $nmr
-            -OR $or
-            -inprc $censorc
-            -P $P 
-            -O $O
-            -progress $progress
+            -optlevel2 "$olev"
+            -part3 "$p3"
+            -part4 "$nmr"
+            -OR "$or"
+            --vapor_pressure "$vp"
+            --temperature "$temperature"
+            -inprc "$censorc"
+            -P "$P"
+            -O "$O"
+            -progress "$progress"
          )
          time censo "${PARAMS3[@]}" >> $OUT
          echo -e "#>>># CENSO: All done!"
@@ -376,46 +445,83 @@ if [ "$mode" != "" ]; then # run block (else just print)
   done
 fi # run block
 
+
+if [ "$run" == "vaporpressure" ]; then
+    echo "===================================================="
+    echo "Vapor pressure evaluation: "
+    # p = p0 * exp(-ΔG/RT)
+    # ΔG = Gvapor -Gliquid
+    temperature=$(echo "$temperature" | gawk '{printf "  %12.2f\n", $1}')
+    for i in 1 2 3
+    do
+        gvap=$(grep "<<==part$i==" B/crenso.out | tail -n 1 | gawk '{printf"  %12.7f\n", $4}')
+        fromvap=$(grep "<<==part$i==" B/crenso.out | tail -n 1 | gawk '{print $5}')
+        gliq=$(grep "<<==part$i==" A/crenso.out | tail -n 1 | gawk '{printf"  %12.7f\n", $5}')
+        fromliq=$(grep "<<==part$i==" A/crenso.out | tail -n 1 | gawk '{print $6}')
+        if [ $i == 3 ]; then
+            fromvap="<<==part$i=="
+            fromliq="<<==part$i=="
+        fi
+        if [ "$gvap" != "" ]; then
+            echo "G_vap          = $gvap a.u.     $fromvap"
+            echo "G_liq          = $gliq a.u.     $fromliq"
+            dG=$(echo "$gvap $gliq" |gawk '{printf "  %12.2f\n", ($1-$2)*627.50947428}')
+            echo "ΔG             = $dG kcal/mol"
+            vwork=$(echo "$temperature" | gawk '{printf"  %12.2f\n", 0.001987204258641*$1*log(1/24.789561955/298.15*$1)}')
+            echo "vwork          = $vwork kcal/mol"
+            p=$(echo "$gvap $vwork $gliq $temperature" |gawk '{printf "  %12.5f\n", exp(-(($1+$2/627.50947428-$3)*627.50947428)/($4 * 0.001987204258641))*100}')
+            echo "temperature    = $temperature K"
+            echo "vapor pressure = $p kPa"
+            echo ""
+        fi
+    done
+    echo "===================================================="
+    echo -e "\n#>>># CRENSO: All done!"
+    echo -e "\n#>>># CRENSO: All done!"  >> $OUT
+    exit
+fi
+
+
 ########################## print result (if no part1/2 out is present, a printout error message appears which can be ignored)
 # the pKa fit is specific for r2SCAN-3c and H2O
 dg1=0
 dg2=0
 dg3=0
 echo "================================================"
-if [ "$s1" = "gas" ]; then           
+if [ "$s1" == "gas" ]; then
 g13=`grep '<<==part3==' A/$OUT | tail -1 | gawk '{print $4}'`
 else
 g13=`grep '<<==part3==' A/$OUT | tail -1 | gawk '{print $5}'`
 fi
 g23=`grep '<<==part3==' B/$OUT | tail -1 | gawk '{print $5}'`
-if [ "$g13" != "" ]; then           
-dg3=$(echo "scale=10; ($g23-($g13))*627.509541" | bc -l | gawk '{printf "  %12.6f\n", $1}')
+if [ "$g13" != "" ]; then
+dg3=$(echo "scale=10; ($g23-($g13))*627.50947428" | bc -l | gawk '{printf "  %12.6f\n", $1}')
 logk3=$(echo "scale=10; ($dg3)"   | bc -l | gawk '{printf "  %12.6f\n", ($1/0.592452)/2.302585}')
 pkal3=$(echo "scale=10; ($logk3)" | bc -l | gawk '{printf "  %12.3f\n", $1*0.890-170.0}')
 pka33=$(echo "scale=10; ($logk3)" | bc -l | gawk '{printf "  %12.3f\n", -1656.7+23.185*$1-0.11103*$1*$1+0.0001835*$1*$1*$1}')
 echo $g13 $g23        " G (A/B)  part3"
 fi
-if [ "$s1" = "gas" ]; then
+if [ "$s1" == "gas" ]; then
 g11=`grep '<<==part1==' A/$OUT | tail -1 | gawk '{print $4}'`
 else
 g11=`grep '<<==part1==' A/$OUT | tail -1 | gawk '{print $5}'`
 fi
 g21=`grep '<<==part1==' B/$OUT | tail -1 | gawk '{print $5}'`
-if [ "$g11" != "" ]; then           
-dg1=$(echo "scale=10; ($g21-($g11))*627.509541" | bc -l | gawk '{printf "  %12.6f\n", $1}')
+if [ "$g11" != "" ]; then
+dg1=$(echo "scale=10; ($g21-($g11))*627.50947428" | bc -l | gawk '{printf "  %12.6f\n", $1}')
 logk1=$(echo "scale=10; ($dg1)"   | bc -l | gawk '{printf "  %12.6f\n", ($1/0.592452)/2.302585}')
 pkal1=$(echo "scale=10; ($logk1)" | bc -l | gawk '{printf "  %12.3f\n", $1*0.890-170.0}')
 pka31=$(echo "scale=10; ($logk1)" | bc -l | gawk '{printf "  %12.3f\n", -1656.7+23.185*$1-0.11103*$1*$1+0.0001835*$1*$1*$1}')
-echo $g11 $g21        " G (A/B)  part1"                        
+echo $g11 $g21        " G (A/B)  part1"
 fi
-if [ "$s1" = "gas" ]; then           
+if [ "$s1" = "gas" ]; then
 g12=`grep '<<==part2==' A/$OUT | tail -1 | gawk '{print $4}'`
 else
 g12=`grep '<<==part2==' A/$OUT | tail -1 | gawk '{print $5}'`
 fi
 g22=`grep '<<==part2==' B/$OUT | tail -1 | gawk '{print $5}'`
-if [ "$g12" != "" ]; then           
-dg2=$(echo "scale=10; ($g22-($g12))*627.509541" | bc -l | gawk '{printf "  %12.6f\n", $1}')
+if [ "$g12" != "" ]; then
+dg2=$(echo "scale=10; ($g22-($g12))*627.50947428" | bc -l | gawk '{printf "  %12.6f\n", $1}')
 logk2=$(echo "scale=10; ($dg2)"   | bc -l | gawk '{printf "  %12.6f\n", ($1/0.592452)/2.302585}')
 pkal2=$(echo "scale=10; ($logk2)" | bc -l | gawk '{printf "  %12.3f\n", $1*0.890-170.0}')
 pka32=$(echo "scale=10; ($logk2)" | bc -l | gawk '{printf "  %12.3f\n", -1656.7+23.185*$1-0.11103*$1*$1+0.0001835*$1*$1*$1}')
@@ -426,16 +532,16 @@ if test -f A/coord.enso_best; then
    b=`head -1 B/coord.enso_best | gawk '{print $5}'`
    echo $a  $b
 fi
-if [ "$run" = "pka" ]; then           
+if [ "$run" == "pka" ]; then
    echo $pka31 $pkal1    " pka (qubic fit), pka(lin fit) part1"
    echo $pka32 $pkal2    " pka (qubic fit), pka(lin fit) part2"
 else
    logk1=$(echo "scale=10; ($dg1)" | bc -l | gawk '{printf "  %12.6f\n", (-$1/0.592452)/2.302585}')
    logk2=$(echo "scale=10; ($dg2)" | bc -l | gawk '{printf "  %12.6f\n", (-$1/0.592452)/2.302585}')
    logk3=$(echo "scale=10; ($dg3)" | bc -l | gawk '{printf "  %12.6f\n", (-$1/0.592452)/2.302585}')
-   echo $logk1           " logK "$s2"-"$s1" part1"
-   echo $logk2           " logK "$s2"-"$s1" part2"
-   echo $logk3           " logK "$s2"-"$s1" part3"
+   echo "$logk1           logK $s2-$s1 part1"
+   echo "$logk2           logK $s2-$s1 part2"
+   echo "$logk3           logK $s2-$s1 part3"
 fi
 echo "================================================"
 echo -e "\n#>>># CRENSO: All done!"
