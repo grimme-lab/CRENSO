@@ -57,12 +57,10 @@ How to cite:
 
 Title: Efficient quantum chemical calculation of structure ensembles and free energies for non-rigid molecules
 
-Authors: Grimme, Stefan; Bohle, Fabian; Hansen, Andreas; Pracht, Philipp; Spicher, Sebastian; Stahn, Marcel
-
 General reference:
 
 S. Grimme, F. Bohle, A. Hansen, P. Pracht, S. Spicher, and M. Stahn 
-*J. Phys. Chem. A* **2021**, XXXX, XXX, XXX-XXX.
+*J. Phys. Chem. A* **2021**, *125* (19), 4039–4054.
 
 DOI: `10.1021/acs.jpca.1c00971 <https://doi.org/10.1021/acs.jpca.1c00971>`_. 
 
