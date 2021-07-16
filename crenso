@@ -195,6 +195,9 @@ if [ "$mode" != "" ]; then # run block (else just print)
       cp coord B
   fi
 
+  censoversion=$(censo --version)
+  xtbversion=$(xtb --version 2>&1 |grep "version"|gawk '{print $4}')
+  crestversion=$(crest --version 2>&1 | grep "Version"|gawk '{print $2}')
   echo "**************************************"
   echo "CREST energy window  : $ec kcal/mol"
   echo "CENSO threshold part0: $ep0 kcal/mol"
@@ -204,6 +207,10 @@ if [ "$mode" != "" ]; then # run block (else just print)
   echo "level treatment      : $mode"
   echo "property             : $run"
   echo "output file          : $OUT"
+  echo "--------------------------------------"
+  echo "CENSO version        : $censoversion"
+  echo "xTB version          : $xtbversion"
+  echo "crest version        : $crestversion"
   echo "**************************************"
   ########################## run
   
@@ -255,7 +262,7 @@ if [ "$mode" != "" ]; then # run block (else just print)
       
       rm -rf enso* CONF*
       
-      if [ "$mode" = "0" ]; then   
+      if [ "$mode" = "0" ]; then
          ############## single structure mode for GFN2 opt input geometries ####
          echo -e "#>>># Running single-structure mode in $m" 
          echo -e "#>>># Running single-structure mode in $m"  >> $OUT
