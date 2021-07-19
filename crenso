@@ -2,7 +2,7 @@
 
 echo '                                                           '
 echo '          =================================================='
-echo '          == crenso V 1.0.4,  SG, FB Feb 2021, MCTC UBonn =='
+echo '          == crenso V 1.0.5,  SG, FB Feb 2021, MCTC UBonn =='
 echo '          =================================================='
 echo ""
 
@@ -10,6 +10,7 @@ echo ""
 # V 1.0.2 We  Feb 10 12:04:11 CET 2021 -nmr, -help, -P, -O flags added
 # V 1.0.3 Mo  Feb 22 15:22:35 CET 2021 added printout 
 # V 1.0.4 Mo  Jul 05 11:04:10 CET 2021 added vapor pressure option
+# V 1.0.5 Mo  Aug 09 15:41:23 CET 2021 added extended PES search again
 
 mode=""
 argcheck=y
@@ -25,6 +26,8 @@ p3=off
 printhelp=off
 progress=on
 change_solvent="off"
+vp="off"
+xt_search="off"
 while [ "$argcheck" = "y" ]; do
    if [ -n "$1" ]; then
       case $1 in
@@ -56,9 +59,10 @@ while [ "$argcheck" = "y" ]; do
       "-inprc"  ) shift; censorc=$1 ;; # explicit path to censorc
       "-vp"     ) shift; s1_alpb=$1; shift; s1_eps=$1; shift; s1_dcosmors=$1; s1='same'; s2=gas; run="vaporpressure"; vp="on"; ec=6; ep0=3; ep1=2.0; olev=lax; p3=off; p1=on ;;  # calculate vapor pressure
       "-vp_fine") shift; s1_alpb=$1; shift; s1_eps=$1; shift; s1_dcosmors=$1; s1='same'; s2=gas; run="vaporpressure"; vp="on"; ec=6; ep0=3; ep1=2.0; olev=lax; p3=on; p1=on ;;  # calculate vapor pressure
-      "-temperature") shift; temperature=$1 ;; 
-      "-h"      ) printhelp=on;;
-      "--help"  ) printhelp=on;;
+      "-temperature") shift; temperature=$1 ;;
+      "-xt"     ) xt_search="on" ;;
+      "-h"      ) printhelp="on";;
+      "--help"  ) printhelp="on";;
       esac
       shift
    else
@@ -97,6 +101,7 @@ if [ $printhelp == on ];then
     echo "-P                 = number of independent parallel threads in CENSO (P * O = T)"
     echo "-O                 = number of cores per independent thread in CENSO (P * O = T)"
     echo "-inprc             = provide explicit absolute path to a CENSO global configuration file"
+    echo "-xt                = Perform crest_combi with the extended FF and GFN2 PES search"
     echo "-h                 = print help message"
     echo ""
     echo "General information:"
@@ -223,11 +228,9 @@ if [ "$mode" != "" ]; then # run block (else just print)
       #echo "system " $m ":" $chrg $uhf $s
       if [ "$m" == "B" ] && [ "$run" == "or" ]; then
           echo -e "\n#>>># CRENSO: All done!"
-          echo -e "\n#>>># CRENSO: All done!"  >> $OUT
           exit
       elif [ "$m" == "B" ] && [ "$run" == "nmr" ]; then
           echo -e "\n#>>># CRENSO: All done!"
-          echo -e "\n#>>># CRENSO: All done!"  >> $OUT
           exit
       fi  
       
@@ -353,7 +356,7 @@ if [ "$mode" != "" ]; then # run block (else just print)
          echo -e "#>>># CENSO: All done!"
          echo -e "\n#>>># CENSO: All done!"  >> $OUT
       fi 
-      if [ "$mode" == "2" ]; then    
+      if [ "$mode" == "2" ]; then
          ############## full crest_combi GESC GFN2 + DFT opt ############# 
          echo -e "#>>># Running full crest_combi in $m" 
          echo -e "#>>># Running full crest_combi in $m"  >> $OUT
@@ -361,14 +364,25 @@ if [ "$mode" != "" ]; then # run block (else just print)
             s=$s1_alpb
             change_solvent="on"
          fi
+         #----------------------------------------------------------------------
+         PARAMS2crest=(
+             -s "$s"
+             -ewin "$ec"
+             -T "$T"
+         )
          if [ "$run" = "nmr" ]; then
-            time crest_combi -s "$s"    -ewin "$ec" -T "$T" -nmr >> $OUT
+            # create anmr_nucinfo anmr_rotamers
+            PARAMS2crest+=("-nmr")
          elif [ "$run" = "or" ]; then
             # increases number of clusters in crest_combi
-            time crest_combi -s "$s"    -ewin "$ec" -T "$T" -or >> $OUT
-         else
-            time crest_combi -s "$s"    -ewin "$ec" -T "$T" >> $OUT
+            PARAMS2crest+=("-or")
          fi
+         if [ "$xt_search" == "on" ]; then
+            # search with FF + GFN2
+            PARAMS2crest+=("-xt")
+         fi
+         time crest_combi "${PARAMS2crest[@]}" >> $OUT
+         #----------------------------------------------------------------------
          echo -e "#>>># Running CENSO after full crest_combi in $m "
          echo -e "\n#>>># Running CENSO after full crest_combi in $m \n"  >> $OUT
          if [ "$run" == "vaporpressure" ] && [ "$change_solvent" == "on" ]; then
@@ -407,7 +421,7 @@ if [ "$mode" != "" ]; then # run block (else just print)
             change_solvent="on"
          fi
          time crest -gesc+ enso_ensemble_part1.xyz -gescopt loose -alpb "$s" -nocross -norotmd -mdlen x1.0 -ewin "$ep0" -T "$T" >> "$OUT"
-              crest -for crest_conformers.xyz --cluster tightincr -T "$T" >> $OUT
+         crest -for crest_conformers.xyz --cluster tightincr -T "$T" >> $OUT
          rm -rf enso* CONF*
          echo -e "#>>># Running CENSO after CREST[gESC] search in $m" 
          echo -e "\n#>>># Running CENSO after CREST[gESC] search in $m \n"   >> $OUT
@@ -450,11 +464,25 @@ if [ "$mode" != "" ]; then # run block (else just print)
             s=$s1_alpb
             change_solvent="on"
          fi
+         #----------------------------------------------------------------------
+         PARAMS3crest=(
+             -s "$s"
+             -ewin "$ec"
+             -T "$T"
+         )
          if [ "$run" = "nmr" ]; then
-            time crest_combi -s "$s"    -ewin "$ec" -T "$T" -nmr >> $OUT
-         else
-            time crest_combi -s "$s"    -ewin "$ec" -T "$T" >> $OUT
+            # create anmr_nucinfo anmr_rotamers
+            PARAMS3crest+=("-nmr")
+         elif [ "$run" = "or" ]; then
+            # increases number of clusters in crest_combi
+            PARAMS3crest+=("-or")
          fi
+         if [ "$xt_search" == "on" ]; then
+            # search with FF + GFN2
+            PARAMS2crest+=("-xt")
+         fi
+         time crest_combi "${PARAMS3crest[@]}" >> $OUT
+         #----------------------------------------------------------------------
          rm -rf enso* CONF*
          echo -e "#>>># Running CENSO after full crest_combi in $m "
          echo -e "\n#>>># Running CENSO after full crest_combi in $m \n"  >> $OUT
@@ -524,7 +552,6 @@ if [ "$run" == "vaporpressure" ]; then
     done
     echo "===================================================="
     echo -e "\n#>>># CRENSO: All done!"
-    echo -e "\n#>>># CRENSO: All done!"  >> $OUT
     exit
 fi
 
