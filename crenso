@@ -25,6 +25,7 @@ p3=off
 printhelp=off
 progress=on
 change_solvent="off"
+vp="off"
 while [ "$argcheck" = "y" ]; do
    if [ -n "$1" ]; then
       case $1 in
