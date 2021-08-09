@@ -20,7 +20,7 @@
 
 echo '                                                                  '
 echo '          ========================================================'
-echo '          == crest_combi V 1.0.3, SG/PP/FB Feb 2021, MCTC UBonn =='
+echo '          == crest_combi V 1.0.4, SG/PP/FB Feb 2021, MCTC UBonn =='
 echo '          ========================================================'
 
 #defaults
@@ -50,11 +50,11 @@ while [ "$argcheck" = "y" ]; do
       "-solvent" ) shift; solv=$1 ;;
       "-g"    ) shift;    solv=$1 ;;
       "-ewin" ) shift;    ewin=$1 ;;
-      "-ffonly" )         mode="ff" ;;
+      "-xt" )             mode="" ;;    #xt = extended search with FF + GFN2 PES search
       "-T" ) shift;       threads=$1 ;;
       "-threads" ) shift; threads=$1 ;;
       "-nmr" )            nmr="-nmr" ;;
-      "-or")              nclust="2000";;
+      "-or")              nclust="1000";;
       "-h"      ) printhelp="on";;
       "--help"  ) printhelp="on";;
       esac
@@ -73,7 +73,7 @@ if [ "$printhelp" == "on" ];then
     echo "-g                   = solvent e.g. h2o or chcl3, equivalent to -s or -solvent"
     echo "-solvent             = solvent e.g. h2o or chcl3, equivalent to -g or -s"
     echo "-ewin                = Energy window within which all structures are considered"
-    echo "-ffonly              = Perform the search with GFN-FF only and don't use a subsequent GFN2 search"
+    echo "-xt                  = Perform the PES search with GFN-FF and with GFN2"
     echo "-T                   = number of threads used in CREST, equivalent to -threads"
     echo "-nmr                 = create anmr_nucinfo and anmr_rotamer file for subsequent NMR calculation"
     echo "-h                   = print help message"
@@ -96,6 +96,21 @@ fi
 
 ewin2=$((ewin+4)) # ewin for intermediate FF run re-ranking with GFN2
 ewin3=$((ewin-2)) # ewin for last GFN2 search (if mode="")
+
+  echo ""
+  echo "*****************************************"
+  echo "CREST energy window      : $ewin kcal/mol"
+  echo "ewin for FF reranking    : $ewin2 kcal/mol"
+  echo "applied solvent          : $solv"
+  if [ "$mode" == "" ]; then
+    echo "search method            : FF + GFN2 "
+    echo "ewin for last GFN2 search: $ewin3"
+  else
+    echo "search method            : $mode"
+  fi
+  echo "nclust                   : $nclust"
+  echo "*****************************************"
+
 
 #########################
 #search on FF level
