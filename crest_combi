@@ -94,8 +94,8 @@ if [ "$printhelp" == "on" ];then
 fi
 
 
-ewin2=$((ewin+4)) # ewin for intermediate FF run re-ranking with GFN2
-ewin3=$((ewin-2)) # ewin for last GFN2 search (if mode="")
+ewin2=$(echo "$ewin + 4" |bc) # ewin for intermediate FF run re-ranking with GFN2
+ewin3=$(echo "$ewin - 2" |bc) # ewin for last GFN2 search (if mode="")
 
   echo ""
   echo "*****************************************"
