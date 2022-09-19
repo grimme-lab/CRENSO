@@ -2,7 +2,7 @@
 
 echo '                                                           '
 echo '          =================================================='
-echo '          == crenso V 1.0.5,  SG, FB Feb 2021, MCTC UBonn =='
+echo '          == crenso V 1.0.6,  SG, FB Feb 2021, MCTC UBonn =='
 echo '          =================================================='
 echo ""
 
@@ -41,7 +41,7 @@ while [ "$argcheck" = "y" ]; do
 #                                            2.0 kcal here yields reasonable thermal averages while more for OR are taken
 #                               8 kcal in crest is required because we really wanna have the best in spectro mode while in thermo mode, a close to best is ok
 #                                     3/4 kcal for part0 is something in between
-      "-pka"    )               ec=6; ep0=3; ep1=2.0; run=pka; s1=h2o; s2=h2o;        olev=lax ;;                 # thermo mode
+      "-pka"    )               ec=6; ep0=3; ep1=2.0; run=pka; s1=h2o; s2=h2o;        olev=lax  p1=on;;                 # thermo mode
       "-kow"    )               ec=6; ep0=3; ep1=2.0; run=kow; s1=h2o; s2=woctanol;   olev=lax; p3=off; p1=on ;;  # thermo mode
       "-kow_fine")              ec=6; ep0=3; ep1=2.0; run=kow; s1=h2o; s2=woctanol;   olev=lax; p3=on;  p1=off ;; # thermo mode
       "-khw"    )               ec=6; ep0=3; ep1=2.0; run=kow; s1=h2o; s2=hexane;     olev=lax; p3=off; p1=on ;;  # thermo mode
@@ -75,7 +75,7 @@ if [ $printhelp == on ];then
     echo "Printing help message:"
     echo ""
     echo "-l0                = single structure mode for GFN2 opt input geometries"
-    echo "-l0opt             = single structure mode for DFT opt input geometries (check or geom. effect)"
+    echo "-l0opt             = single structure mode for DFT opt input geometries (check for geom. effect)"
     echo "-l1                = quick crest_combi + CENSO[part0/1]"
     echo "-l1opt             = quick crest_combi + CENSO[part0/1/2] i.e. DFT optimization"
     echo "-l2                =  DEPRECATED !!!!!!!!  full crest_combi + gESC + CENSO[part0/1/2]"
